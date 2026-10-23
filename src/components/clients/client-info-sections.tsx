@@ -43,6 +43,8 @@ export function ClientCard({
   const [gsc, setGsc] = useState(client.gsc_site_url ?? "");
   const [ga4, setGa4] = useState(client.ga4_property_id ?? "");
   const [status, setStatus] = useState(client.status);
+  const hasKind = "kind" in client; // 0032
+  const [kind, setKind] = useState<"client" | "partner">(client.kind === "partner" ? "partner" : "client");
   const [memo, setMemo] = useState(client.memo ?? "");
   const [msg, setMsg] = useState("");
   // 0028 회사 정보 — 컬럼이 있는 DB 에서만 저장한다 (없으면 칸도 숨김)
@@ -64,6 +66,7 @@ export function ClientCard({
       gsc_site_url: gsc || null,
       ga4_property_id: ga4 || null,
       status,
+      ...(hasKind ? { kind } : {}),
       memo: memo || null,
       ...(hasCompanyCols
         ? Object.fromEntries(Object.entries(company).map(([k, v]) => [k, v.trim() || null]))
@@ -122,6 +125,20 @@ export function ClientCard({
             <option value="ended">종료</option>
           </select>
         </div>
+        {hasKind && !client.is_internal && (
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted">구분</label>
+            <select
+              value={kind}
+              onChange={(e) => setKind(e.target.value as "client" | "partner")}
+              disabled={readOnly}
+              className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm disabled:bg-subtle"
+            >
+              <option value="client">고객사</option>
+              <option value="partner">협업사</option>
+            </select>
+          </div>
+        )}
       </div>
       <div className="space-y-1.5">
         <label className="text-xs font-medium text-muted">메모</label>

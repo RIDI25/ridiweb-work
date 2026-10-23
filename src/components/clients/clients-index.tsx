@@ -9,7 +9,7 @@ import { saveClient } from "@/lib/actions/settings";
 import { clientPath } from "@/lib/nav";
 import { getService } from "@/lib/services";
 import { kstMonth, monthContentSummary, monthBoundsUtc, type PublishRow } from "@/lib/publish-stats";
-import type { Client, ClientService } from "@/types/database";
+import { CLIENT_KIND_LABEL, clientKind, type Client, type ClientKind, type ClientService } from "@/types/database";
 
 type ContentRow = PublishRow & { client_id: string; approval_status: string };
 type PlanRow = { client_id: string; status: string; scheduled_date: string | null };
@@ -34,6 +34,8 @@ export function ClientsIndex() {
   const router = useRouter();
   const [data, setData] = useState<Loaded | null>(null);
   const [filter, setFilter] = useState<"active" | "all">("active");
+  const [kind, setKind] = useState<ClientKind>("client");
+  const kindReady = clients.some((c) => "kind" in c); // 0032 컬럼이 있을 때만 협업사로 만들 수 있다
   const [q, setQ] = useState("");
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
@@ -77,7 +79,7 @@ export function ClientsIndex() {
     if (!name) return;
     setCreating(true);
     setMsg("");
-    const r = await saveClient(null, { name });
+    const r = await saveClient(null, kind === "partner" && kindReady ? { name, kind } : { name });
     if (!r.ok) {
       setMsg(`만들지 못했습니다: ${r.error}`);
       setCreating(false);
@@ -90,7 +92,10 @@ export function ClientsIndex() {
     if (made) router.push(clientPath(made.id, "info"));
   }
 
+  const counts = { client: clients.filter((c) => clientKind(c) === "client").length, partner: clients.filter((c) => clientKind(c) === "partner").length };
+  const label = CLIENT_KIND_LABEL[kind];
   const visible = clients
+    .filter((c) => clientKind(c) === kind)
     .filter((c) => (filter === "all" ? true : c.status === "active"))
     .filter((c) => (q.trim() ? c.name.includes(q.trim()) : true));
 
@@ -98,8 +103,8 @@ export function ClientsIndex() {
     <div className="mx-auto max-w-6xl space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-ink">고객사</h1>
-          <p className="mt-1 text-sm text-muted">카드 하나가 이번 달 상태입니다. 이름을 누르면 그 고객사의 모든 것이 한 장에 모입니다.</p>
+          <h1 className="text-xl font-bold text-ink">고객사 · 협업사</h1>
+          <p className="mt-1 text-sm text-muted">카드 하나가 이번 달 상태입니다. 이름을 누르면 그 회사의 모든 것이 한 장에 모입니다.</p>
         </div>
         <div className="flex items-center gap-2">
           <input
@@ -108,7 +113,7 @@ export function ClientsIndex() {
             onKeyDown={(e) => {
               if (e.key === "Enter") void create();
             }}
-            placeholder="새 고객사 이름 (이름만 있으면 됩니다)"
+            placeholder={`새 ${label} 이름 (이름만 있으면 됩니다)`}
             className="w-64 rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent-deep"
           />
           <button
@@ -116,11 +121,28 @@ export function ClientsIndex() {
             disabled={creating || !newName.trim()}
             className="rounded-md bg-accent px-3 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
           >
-            {creating ? "만드는 중…" : "+ 새 고객사"}
+            {creating ? "만드는 중…" : `+ 새 ${label}`}
           </button>
         </div>
       </div>
       {msg && <p className="text-sm text-red-600">{msg}</p>}
+
+      <div className="flex gap-1 border-b border-border">
+        {(["client", "partner"] as const).map((k) => (
+          <button
+            key={k}
+            onClick={() => setKind(k)}
+            className={["-mb-px border-b-2 px-4 py-2 text-sm", kind === k ? "border-accent font-semibold text-accent-deep" : "border-transparent text-muted hover:text-ink"].join(" ")}
+          >
+            {CLIENT_KIND_LABEL[k]} <span className="ml-0.5 text-xs text-muted">{counts[k]}</span>
+          </button>
+        ))}
+      </div>
+      {kind === "partner" && !kindReady && (
+        <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          협업사 구분 칸이 아직 없습니다. supabase/migrations/0032_client_kind.sql 을 SQL Editor 에서 실행하면 협업사를 만들고 옮길 수 있습니다.
+        </p>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         {(["active", "all"] as const).map((f) => (
@@ -147,7 +169,7 @@ export function ClientsIndex() {
         <p className="text-sm text-muted">불러오는 중…</p>
       ) : visible.length === 0 ? (
         <p className="rounded-md border border-dashed border-border py-8 text-center text-sm text-muted">
-          {clients.length === 0 ? "고객사가 없습니다. 위에 이름을 적고 만들어 보세요." : "조건에 맞는 고객사가 없습니다."}
+          {counts[kind] === 0 ? `${label}가 없습니다. 위에 이름을 적고 만들어 보세요.${kind === "partner" ? " 기존 고객사는 기본정보에서 구분을 협업사로 바꾸면 옮겨집니다." : ""}` : `조건에 맞는 ${label}가 없습니다.`}
         </p>
       ) : (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">

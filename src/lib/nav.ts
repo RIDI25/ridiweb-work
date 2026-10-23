@@ -26,7 +26,7 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "오늘", icon: "☀️" },
-  { href: "/clients", label: "고객사", icon: "🤝" },
+  { href: "/clients", label: "고객사 · 협업사", icon: "🤝" },
   { href: "/sales", label: "영업", icon: "📞" },
   { href: "/diagnosis", label: "SEO 진단", parent: "/sales" },
   { href: "/quotes", label: "견적서 · 계약서", parent: "/sales" },

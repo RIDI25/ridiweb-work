@@ -5,7 +5,7 @@ import { Suspense } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { CLIENT_TABS, CONTENT_VIEWS, NAV_ITEMS, clientPath, parseClientPath, type NavItem } from "@/lib/nav";
 import { useClientContext } from "@/components/providers/client-context";
-import type { Role } from "@/types/database";
+import { CLIENT_KIND_LABEL, clientKind, type Role } from "@/types/database";
 
 /**
  * 왼쪽 메뉴 — 질문 다섯 개(오늘·고객사·영업·정산·일정) + 보조.
@@ -93,12 +93,20 @@ function ClientBlock({ clientId, tab, onNavigate }: { clientId: string; tab: str
           className="mb-1 w-full rounded-md border border-accent/40 bg-surface px-2 py-1.5 text-sm font-semibold text-accent-deep outline-none focus:border-accent"
         >
           {!current && <option value={clientId}>(고객사)</option>}
-          {clients.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-              {c.is_internal ? " (내부)" : ""}
-            </option>
-          ))}
+          {(["client", "partner"] as const).map((k) => {
+            const group = clients.filter((c) => clientKind(c) === k);
+            if (!group.length) return null;
+            return (
+              <optgroup key={k} label={CLIENT_KIND_LABEL[k]}>
+                {group.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                    {c.is_internal ? " (내부)" : ""}
+                  </option>
+                ))}
+              </optgroup>
+            );
+          })}
         </select>
       )}
       {CLIENT_TABS.map((t) => {

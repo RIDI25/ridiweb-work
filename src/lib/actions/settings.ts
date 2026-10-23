@@ -6,6 +6,8 @@ import { ensureOnboardingTasks } from "@/lib/actions/onboarding";
 
 interface ClientPatch {
   name?: string;
+  /** 0032 고객사/협업사 */
+  kind?: "client" | "partner";
   gsc_site_url?: string | null;
   ga4_property_id?: string | null;
   status?: "active" | "paused" | "ended";
