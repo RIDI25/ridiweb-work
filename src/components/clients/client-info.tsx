@@ -8,6 +8,7 @@ import { useClientContext } from "@/components/providers/client-context";
 import { ClientServicesSection } from "@/components/settings/client-services";
 import { ChannelAccountsSection, ClientCard, DangerZone, WordpressTab } from "@/components/clients/client-info-sections";
 import { ClientBriefCard } from "@/components/clients/client-brief";
+import { BizRegCard } from "@/components/clients/biz-reg-card";
 import { TrackerTargetsCard } from "@/components/clients/tracker-targets-card";
 import { clientPath } from "@/lib/nav";
 import type { Profile } from "@/types/database";
@@ -46,6 +47,11 @@ export function ClientInfo({ id }: { id: string }) {
       <section className="space-y-2">
         <h2 className="text-sm font-bold text-ink">기본 정보 · 온보딩</h2>
         <ClientCard client={client} readOnly={false} onSaved={() => void refreshClients()} />
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-sm font-bold text-ink">사업자등록증</h2>
+        <BizRegCard key={client.id} clientId={client.id} />
       </section>
 
       <section className="space-y-2">

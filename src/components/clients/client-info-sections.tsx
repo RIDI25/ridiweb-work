@@ -92,6 +92,29 @@ export function ClientCard({
           </span>
         )}
       </div>
+      {!client.is_internal && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium text-muted">구분</span>
+          {hasKind ? (
+            <div className="flex rounded-md border border-border bg-subtle p-0.5">
+              {(["client", "partner"] as const).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  disabled={readOnly}
+                  onClick={() => setKind(k)}
+                  className={["rounded px-4 py-1 text-sm", kind === k ? "bg-surface font-semibold text-accent-deep shadow-sm" : "text-muted hover:text-ink"].join(" ")}
+                >
+                  {k === "client" ? "고객사" : "협업사"}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <span className="text-xs text-muted">0032_client_kind.sql 을 실행하면 고객사/협업사를 고를 수 있습니다.</span>
+          )}
+          {hasKind && kind !== (client.kind === "partner" ? "partner" : "client") && <span className="text-xs text-amber-700">아래 저장을 눌러야 반영됩니다</span>}
+        </div>
+      )}
       {hasCompanyCols ? (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <Field label="업종 (자유 입력)" value={company.industry} onChange={setCo("industry")} disabled={readOnly} />
@@ -125,20 +148,7 @@ export function ClientCard({
             <option value="ended">종료</option>
           </select>
         </div>
-        {hasKind && !client.is_internal && (
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted">구분</label>
-            <select
-              value={kind}
-              onChange={(e) => setKind(e.target.value as "client" | "partner")}
-              disabled={readOnly}
-              className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm disabled:bg-subtle"
-            >
-              <option value="client">고객사</option>
-              <option value="partner">협업사</option>
-            </select>
-          </div>
-        )}
+
       </div>
       <div className="space-y-1.5">
         <label className="text-xs font-medium text-muted">메모</label>
