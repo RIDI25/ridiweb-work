@@ -1,42 +1,35 @@
 /**
- * 워크스페이스 네비게이션 정의 (config 기반). 2026-09-06 개편안 1차: "질문 다섯 개".
- *
- * - 오늘: 지금 무엇을 처리해야 하나 (/)
- * - 고객사: 이 고객의 일이 어디까지 왔나 (/clients → /clients/[id]/[탭])
- * - 영업: 누구에게 어떤 다음 행동을 (/sales, /diagnosis, /quotes)
- * - 정산: 청구했고 들어왔고 남았나 (/revenue, /ledger)
- * - 일정: 언제 무엇이 예정돼 있나 (/schedule, /tasks)
- * - 보조: 설정, 데일리 소식
- *
- * 콘텐츠(키워드·플랜·생성·라이브러리)·SEO·GEO·서치콘솔·GA4 는 고객사 카드의 탭이다 (CLIENT_TABS).
- * 옛 주소(/plans 등)는 그대로 열리되 지금 고객사의 카드로 안내한다.
- * 2026-09-06 결정: 팀원 2명 모두 같은 권한 → ownerOnly 구분 없음.
+ * Primary navigation: assistant → calendar → meetings → clients → SEO/GEO → finance.
+ * Search performance routes stay client-scoped and belong to the SEO/GEO section.
+ * Legacy URLs remain available for existing links and bookmarks.
  */
+export type NavIconName = "chat" | "calendar" | "notes" | "clients" | "search" | "wallet";
 
 export interface NavItem {
   href: string;
   label: string;
-  /** 소속 질문(상위 항목)의 href. 없으면 상위 항목 자신 */
+  /** 상위 메뉴의 href. 없으면 최상위 항목 */
   parent?: string;
-  /** 항목 앞 아이콘 (이모지) */
-  icon?: string;
+  /** 통일된 선 아이콘 */
+  icon?: NavIconName;
   /** 보조 메뉴(아래쪽 작은 글씨) */
   aux?: boolean;
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  { href: "/", label: "오늘", icon: "☀️" },
-  { href: "/clients", label: "고객사 · 협업사", icon: "🤝" },
-  { href: "/sales", label: "영업", icon: "📞" },
-  { href: "/diagnosis", label: "SEO 진단", parent: "/sales" },
-  { href: "/quotes", label: "견적서 · 계약서", parent: "/sales" },
-  { href: "/schedule", label: "업무 · 일정", icon: "📅" },
+  { href: "/assistant", label: "비서 채팅", icon: "chat" },
+  { href: "/schedule", label: "캘린더", icon: "calendar" },
+  { href: "/", label: "오늘 할 일", parent: "/schedule" },
   { href: "/tasks", label: "업무 보드", parent: "/schedule" },
-  { href: "/assistant", label: "비서 채팅", icon: "✦" },
-  { href: "/meetings", label: "회의록", icon: "📝" },
-  { href: "/revenue", label: "정산", icon: "💳" },
-  { href: "/ledger", label: "장부", parent: "/revenue" },
-  { href: "/settings", label: "설정 (팀 · 연동 · 사용량)", aux: true },
+  { href: "/meetings", label: "회의록", icon: "notes" },
+  { href: "/clients", label: "고객/협력사", icon: "clients" },
+  { href: "/sales", label: "영업 관리", parent: "/clients" },
+  { href: "/quotes", label: "견적서 · 계약서", parent: "/clients" },
+  { href: "/seo-geo", label: "SEO/GEO", icon: "search" },
+  { href: "/diagnosis", label: "사이트 진단", parent: "/seo-geo" },
+  { href: "/revenue", label: "정산", icon: "wallet" },
+  { href: "/ledger", label: "입출금 장부", parent: "/revenue" },
+  { href: "/settings", label: "설정", aux: true },
   { href: "/daily", label: "데일리 소식", aux: true },
 ];
 
@@ -87,3 +80,11 @@ export const LEGACY_ROUTES: Record<string, { tab: ClientTab["key"]; view?: strin
   "/reports": { tab: "reports" },
   "/tracking": { tab: "geo" },
 };
+
+/** A client URL has one primary section, even though its page keeps the client tabs. */
+export function getNavSection(pathname: string): string | null {
+  const client = parseClientPath(pathname);
+  if (client) return ["seo", "geo", "reports"].includes(client.tab ?? "") ? "/seo-geo" : "/clients";
+  const item = NAV_ITEMS.find(entry => pathname === entry.href || (entry.href !== "/" && pathname.startsWith(`${entry.href}/`)));
+  return item?.parent ?? item?.href ?? null;
+}

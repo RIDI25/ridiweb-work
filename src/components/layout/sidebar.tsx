@@ -1,199 +1,110 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, type ReactNode } from "react";
+import { Suspense, useId, useState, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { CLIENT_TABS, CONTENT_VIEWS, NAV_ITEMS, clientPath, parseClientPath, type NavItem } from "@/lib/nav";
+import { CONTENT_VIEWS, NAV_ITEMS, clientPath, getNavSection, parseClientPath, type ClientTab } from "@/lib/nav";
 import { useClientContext } from "@/components/providers/client-context";
 import { CLIENT_KIND_LABEL, clientKind, type Role } from "@/types/database";
+import { NavIcon } from "./nav-icon";
+import styles from "./sidebar.module.css";
 
-/**
- * 왼쪽 메뉴 — 질문 다섯 개(오늘·고객사·영업·정산·일정) + 보조.
- * 고객사 카드 안에 있으면 '고객사' 아래에 고객사 선택과 탭(개요·콘텐츠·SEO·GEO·서치콘솔·GA4·기본정보)이 펼쳐지고,
- * 콘텐츠 아래에는 다섯 보기(작업 목록·플랜·글 만들기·라이브러리·키워드 리서치)가 항상 보인다.
- */
-function NavLink({
-  item,
-  active,
-  sub,
-  onNavigate,
-}: {
-  item: { href: string; label: string; icon?: string };
-  active: boolean;
-  sub?: boolean;
-  onNavigate?: () => void;
-}) {
-  return (
-    <Link
-      href={item.href}
-      onClick={onNavigate}
-      aria-current={active ? "page" : undefined}
-      className={[
-        "flex items-center gap-2 rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-accent",
-        sub ? "ml-7 px-3 py-1.5 text-[14px]" : "px-3 py-2.5 text-[15px] font-semibold",
-        active ? "bg-tint text-accent-deep" : sub ? "text-muted hover:bg-subtle hover:text-ink" : "text-ink hover:bg-subtle",
-      ].join(" ")}
-    >
-      {item.icon && !sub && (
-        <span className="w-5 shrink-0 text-center text-[14px]" aria-hidden>
-          {item.icon}
-        </span>
-      )}
-      <span className="truncate">{item.label}</span>
-    </Link>
-  );
+function SubLink({ href, label, active, onNavigate }: { href: string; label: string; active: boolean; onNavigate?: () => void }) {
+  return <Link href={href} className={styles.subLink} aria-current={active ? "page" : undefined} onClick={onNavigate}>{label}</Link>;
 }
 
-/** 콘텐츠 탭 아래 다섯 보기. current 가 없으면 강조 없이 */
-function ContentViewList({ clientId, current, onNavigate }: { clientId: string; current: string | null; onNavigate?: () => void }) {
-  return (
-    <div className="mb-0.5 ml-4 border-l border-accent/25 pl-1.5">
-      {CONTENT_VIEWS.map((v) => {
-        const active = current === v.key;
-        return (
-          <Link
-            key={v.key}
-            href={clientPath(clientId, "content", `view=${v.key}`)}
-            onClick={onNavigate}
-            title={v.hint}
-            className={["flex items-center rounded-md px-2 py-1 text-[13px]", active ? "bg-surface font-semibold text-accent-deep shadow-sm" : "text-muted hover:bg-surface/80 hover:text-ink"].join(" ")}
-          >
-            {v.label}
-          </Link>
-        );
-      })}
-    </div>
-  );
-}
-
-/** 주소의 ?view= 로 지금 보기를 강조 (useSearchParams 는 Suspense 안에서만) */
-function ContentViewLinks({ clientId, inContentTab, onNavigate }: { clientId: string; inContentTab: boolean; onNavigate?: () => void }) {
+function ContentViewLinks({ clientId, onNavigate }: { clientId: string; onNavigate?: () => void }) {
   const params = useSearchParams();
   const raw = params.get("view");
-  const current = inContentTab ? (CONTENT_VIEWS.some((v) => v.key === raw) ? raw : "work") : null;
-  return <ContentViewList clientId={clientId} current={current} onNavigate={onNavigate} />;
+  const current = CONTENT_VIEWS.some(view => view.key === raw) ? raw : "work";
+  return <div className={styles.contentViews}>{CONTENT_VIEWS.map(view => <SubLink key={view.key} href={clientPath(clientId, "content", `view=${view.key}`)} label={view.label} active={current === view.key} onNavigate={onNavigate} />)}</div>;
 }
 
-/** 고객사 카드 안: 고객사 선택 + 탭 */
-function ClientBlock({ clientId, tab, onNavigate }: { clientId: string; tab: string | null; onNavigate?: () => void }) {
+const clientLinks: { tab: ClientTab["key"]; label: string }[] = [
+  { tab: "overview", label: "고객 개요" },
+  { tab: "content", label: "콘텐츠 작업" },
+  { tab: "info", label: "고객 정보" },
+];
+const searchLinks: { tab: ClientTab["key"]; label: string }[] = [
+  { tab: "seo", label: "SEO · 검색 순위" },
+  { tab: "geo", label: "GEO · AI 노출" },
+  { tab: "reports", label: "검색 유입 · 분석" },
+];
+
+/** Keep client-specific links under the section that owns the current work. */
+function ClientLinks({ search, onNavigate }: { search: boolean; onNavigate?: () => void }) {
+  const pathname = usePathname();
   const router = useRouter();
-  const { clients, loading } = useClientContext();
-  const current = clients.find((c) => c.id === clientId);
-  return (
-    <div className="ml-3 mt-1 rounded-lg border border-accent/30 bg-tint/60 p-1.5">
-      {loading ? (
-        <p className="px-2 py-1 text-xs text-muted">고객사 불러오는 중…</p>
-      ) : (
-        <select
-          value={clientId}
-          onChange={(e) => {
-            router.push(clientPath(e.target.value, (tab as (typeof CLIENT_TABS)[number]["key"]) ?? "overview"));
-            onNavigate?.();
-          }}
-          aria-label="고객사 선택"
-          className="mb-1 w-full rounded-md border border-accent/40 bg-surface px-2 py-1.5 text-sm font-semibold text-accent-deep outline-none focus:border-accent"
-        >
-          {!current && <option value={clientId}>(고객사)</option>}
-          {(["client", "partner"] as const).map((k) => {
-            const group = clients.filter((c) => clientKind(c) === k);
-            if (!group.length) return null;
-            return (
-              <optgroup key={k} label={CLIENT_KIND_LABEL[k]}>
-                {group.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                    {c.is_internal ? " (내부)" : ""}
-                  </option>
-                ))}
-              </optgroup>
-            );
-          })}
-        </select>
-      )}
-      {CLIENT_TABS.map((t) => {
-        const active = tab === t.key;
-        return (
-          <div key={t.key}>
-            <Link
-              href={clientPath(clientId, t.key)}
-              onClick={onNavigate}
-              className={[
-                "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[14px]",
-                active ? "bg-surface font-semibold text-accent-deep shadow-sm ring-1 ring-accent/30" : "text-ink hover:bg-surface/80",
-              ].join(" ")}
-            >
-              {t.icon && (
-                <span className="w-4 text-center text-[12px]" aria-hidden>
-                  {t.icon}
-                </span>
-              )}
-              {t.label}
-            </Link>
-            {t.key === "content" && (
-              <Suspense fallback={<ContentViewList clientId={clientId} current={null} onNavigate={onNavigate} />}>
-                <ContentViewLinks clientId={clientId} inContentTab={active} onNavigate={onNavigate} />
-              </Suspense>
-            )}
-          </div>
-        );
+  const { clients, selectedClientId, setSelectedClientId, loading } = useClientContext();
+  const inClient = parseClientPath(pathname);
+  const links = search ? searchLinks : clientLinks;
+  const clientId = inClient?.clientId ?? selectedClientId;
+  const current = clients.find(client => client.id === clientId);
+  const pickerId = useId();
+  if (!search && !inClient) return null;
+  if (loading) return <p className={styles.loading}>고객을 불러오고 있어요…</p>;
+  return <div className={styles.clientBlock}>
+    <label htmlFor={pickerId}>{search ? "확인할 고객" : "선택한 고객"}</label>
+    <select id={pickerId} value={current?.id ?? ""} onChange={event => {
+      const nextId = event.target.value;
+      setSelectedClientId(nextId);
+      if (inClient) {
+        const tab = links.some(link => link.tab === inClient.tab) ? inClient.tab! : links[0].tab;
+        router.push(clientPath(nextId, tab));
+        onNavigate?.();
+      }
+    }}>
+      {!current && <option value="" disabled>고객을 선택해 주세요</option>}
+      {(["client", "partner"] as const).map(kind => {
+        const group = clients.filter(client => clientKind(client) === kind);
+        return group.length ? <optgroup key={kind} label={CLIENT_KIND_LABEL[kind]}>{group.map(client => <option key={client.id} value={client.id}>{client.name}{client.is_internal ? " (내부)" : ""}</option>)}</optgroup> : null;
       })}
-    </div>
-  );
+    </select>
+    {current ? links.map(link => <div key={link.tab}>
+      <SubLink href={clientPath(current.id, link.tab)} label={link.label} active={inClient?.tab === link.tab && inClient.clientId === current.id} onNavigate={onNavigate} />
+      {!search && link.tab === "content" && inClient?.tab === "content" && <ContentViewLinks clientId={current.id} onNavigate={onNavigate} />}
+    </div>) : <SubLink href="/clients" label="고객 목록에서 확인하기" active={false} onNavigate={onNavigate} />}
+  </div>;
 }
 
 function NavListInner({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
+  const activeSection = getNavSection(pathname);
+  const [expanded, setExpanded] = useState<{ pathname: string; section: string | null } | null>(null);
+  const openSection = expanded?.pathname === pathname ? expanded.section : activeSection;
+  const navId = useId();
   const inClient = parseClientPath(pathname);
-  const isActive = (href: string) => (href === "/" ? pathname === "/" : (pathname === href || pathname.startsWith(`${href}/`)));
-  const primaries = NAV_ITEMS.filter((i) => !i.parent && !i.aux);
-  const subsOf = (href: string) => NAV_ITEMS.filter((i) => i.parent === href);
-  const auxes = NAV_ITEMS.filter((i) => i.aux);
-  /** 상위 항목은 자기 또는 하위 항목 경로에서 켜진다 */
-  const primaryActive = (item: NavItem) =>
-    isActive(item.href) || subsOf(item.href).some((s) => isActive(s.href)) || (item.href === "/clients" && !!inClient);
-
-  return (
-    <nav aria-label="주 메뉴" className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pb-4 pt-2 [scrollbar-width:thin]">
-      {primaries.map((item) => (
-        <div key={item.href}>
-          <NavLink item={item} active={primaryActive(item)} onNavigate={onNavigate} />
-          {item.href === "/clients" && inClient && (
-            <ClientBlock clientId={inClient.clientId} tab={inClient.tab} onNavigate={onNavigate} />
-          )}
-          {subsOf(item.href).map((s) => (
-            <NavLink key={s.href} item={s} active={isActive(s.href)} sub onNavigate={onNavigate} />
-          ))}
-        </div>
-      ))}
-      <div className="pt-4">
-        <p className="px-3 pb-2 text-xs font-semibold tracking-wide text-muted">보조</p>
-        {auxes.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={onNavigate}
-            className={[
-              "block rounded-md px-3 py-2 text-[14px] focus-visible:outline-2 focus-visible:outline-accent",
-              isActive(item.href) ? "bg-tint text-accent-deep" : "text-muted hover:bg-subtle hover:text-ink",
-            ].join(" ")}
-          >
-            {item.label}
+  const matches = (href: string) => pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
+  return <nav aria-label="주 메뉴" className={styles.nav}>
+    {NAV_ITEMS.filter(item => !item.parent && !item.aux).map(item => {
+      const children = NAV_ITEMS.filter(child => child.parent === item.href);
+      const hasChildren = children.length > 0;
+      const open = hasChildren && openSection === item.href;
+      const submenuId = `${navId}-${item.href.slice(1)}`;
+      return <div key={item.href} className={styles.group}>
+        <div className={styles.menuRow} data-active={activeSection === item.href}>
+          <Link href={item.href} className={styles.mainLink} aria-current={pathname === item.href ? "page" : undefined} onClick={() => { setExpanded({ pathname, section: item.href }); onNavigate?.(); }}>
+            {item.icon && <NavIcon name={item.icon} />}<span>{item.label}</span>
           </Link>
-        ))}
-      </div>
-    </nav>
-  );
+          {hasChildren && <button className={styles.toggle} aria-label={`${item.label} 하위 메뉴 ${open ? "접기" : "펼치기"}`} aria-expanded={open} aria-controls={submenuId} onClick={() => setExpanded({ pathname, section: open ? null : item.href })}>
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden><path d="m6 4 4 4-4 4" /></svg>
+          </button>}
+        </div>
+        {hasChildren && <div id={submenuId} className={styles.subMenu} hidden={!open}>
+          {item.href === "/seo-geo" && open && <ClientLinks search onNavigate={onNavigate} />}
+          {children.map(child => <SubLink key={child.href} href={child.href} label={child.label} active={matches(child.href)} onNavigate={onNavigate} />)}
+          {item.href === "/clients" && open && inClient && <ClientLinks search={false} onNavigate={onNavigate} />}
+        </div>}
+      </div>;
+    })}
+    <div className={styles.aux}>{NAV_ITEMS.filter(item => item.aux).map(item => <SubLink key={item.href} href={item.href} label={item.label} active={matches(item.href)} onNavigate={onNavigate} />)}</div>
+  </nav>;
 }
 
-/** 데스크톱 사이드바·모바일 드로어 공용 메뉴 목록 (role 은 하위 호환용 — 2인 모두 같은 권한) */
+/** Desktop and mobile share the same menu order, grouping, and current section. */
 export function NavList(props: { role?: Role; onNavigate?: () => void }) {
-  return (
-    <Suspense fallback={null}>
-      <NavListInner onNavigate={props.onNavigate} />
-    </Suspense>
-  );
+  return <Suspense fallback={null}><NavListInner onNavigate={props.onNavigate} /></Suspense>;
 }
-
 export function Sidebar({ role, footer }: { role: Role; footer: ReactNode }) {
   return (
     <aside aria-label="워크스페이스 메뉴" className="flex h-full min-h-0 flex-col border-r border-border bg-surface">

@@ -49,12 +49,12 @@ export interface Client extends Timestamps {
   contact_phone?: string | null;
   /** 0029: 서치콘솔·GA4 자동 갱신 (크론) */
   google_auto_fetch?: boolean;
-  /** 0032: 고객사(client) / 협업사(partner). 컬럼이 없으면 고객사로 본다 */
+  /** 0032: 고객사(client) / 협력사(partner). 컬럼이 없으면 고객사로 본다 */
   kind?: ClientKind;
 }
 
 export type ClientKind = "client" | "partner";
-export const CLIENT_KIND_LABEL: Record<ClientKind, string> = { client: "고객사", partner: "협업사" };
+export const CLIENT_KIND_LABEL: Record<ClientKind, string> = { client: "고객사", partner: "협력사" };
 /** 컬럼 없는 DB(0032 전)·빈 값은 고객사 */
 export const clientKind = (c: { kind?: string | null }): ClientKind => (c.kind === "partner" ? "partner" : "client");
 

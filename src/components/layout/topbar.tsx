@@ -11,7 +11,7 @@ export function UserMenu({ userName, side = false }: { userName: string; side?: 
         <span className="flex-1">{userName}</span><span className="text-muted" aria-hidden>{side ? "⌃" : "⌄"}</span>
       </summary>
       <div className={`absolute z-50 w-64 rounded-xl border border-border bg-surface p-2 shadow-lg ${side ? "bottom-full left-0 mb-2" : "right-0 top-full mt-2"}`}>
-        <Link href="/settings" className="block rounded-md px-3 py-2.5 text-sm hover:bg-subtle">설정 · 팀 · 연동</Link>
+        <Link href="/settings" className="block rounded-md px-3 py-2.5 text-sm hover:bg-subtle">설정</Link>
         <Link href="/daily" className="block rounded-md px-3 py-2.5 text-sm hover:bg-subtle">데일리 소식</Link>
         <form action={signOut} className="mt-1 border-t border-border pt-1"><button type="submit" className="w-full rounded-md px-3 py-2.5 text-left text-sm text-muted hover:bg-subtle">로그아웃</button></form>
       </div>

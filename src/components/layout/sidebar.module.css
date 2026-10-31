@@ -1,0 +1,26 @@
+.nav { min-height:0; flex:1; overflow-y:auto; padding:4px 12px 20px; scrollbar-width:thin; }
+.group + .group { margin-top:6px; }
+.menuRow { display:flex; align-items:center; border-radius:9px; }
+.menuRow[data-active=true] { background:var(--color-tint); color:var(--color-accent-deep); box-shadow:inset 3px 0 var(--color-accent); }
+.menuRow:hover { background:var(--color-subtle); }
+.menuRow[data-active=true]:hover { background:var(--color-tint); }
+.mainLink { display:flex; align-items:center; flex:1; min-width:0; gap:12px; padding:12px; font-size:16px; font-weight:600; letter-spacing:-.025em; }
+.mainLink svg { flex-shrink:0; }
+.mainLink span { white-space:nowrap; }
+.toggle { display:grid; place-items:center; width:32px; height:42px; margin-right:3px; color:var(--color-muted); cursor:pointer; border-radius:7px; }
+.toggle[aria-expanded=true] svg { transform:rotate(90deg); }
+.toggle:hover { color:var(--color-accent-deep); }
+.subMenu { margin:4px 4px 12px 23px; padding-left:13px; border-left:1px solid var(--color-border); }
+.subLink { display:block; padding:8px 9px; font-size:14px; line-height:1.5; border-radius:7px; color:var(--color-muted); }
+.subLink:hover { background:var(--color-subtle); color:var(--color-ink); }
+.subLink[aria-current=page] { background:var(--color-tint); color:var(--color-accent-deep); font-weight:600; }
+.clientBlock { margin:8px 0; padding:10px 0 4px; border-top:1px solid var(--color-border); }
+.clientBlock label { display:block; padding:0 8px 5px; color:var(--color-muted); font-size:12px; }
+.clientBlock select { width:100%; min-width:0; margin-bottom:8px; padding:7px 8px; border:1px solid var(--color-border); border-radius:7px; background:var(--color-surface); font-size:14px; color:var(--color-ink); }
+.loading { padding:8px; color:var(--color-muted); font-size:13px; }
+.contentViews { margin:2px 0 6px 9px; padding-left:8px; border-left:1px solid var(--color-border); }
+.contentViews .subLink { padding:7px 6px; font-size:13px; }
+.aux { margin-top:26px; padding:14px 4px 0; border-top:1px solid var(--color-border); }
+.aux .subLink { font-size:14px; }
+.nav a:focus-visible,.nav button:focus-visible,.nav select:focus-visible { outline:2px solid var(--color-accent); outline-offset:2px; }
+@media(max-width:767px) { .clientBlock select { font-size:16px; } }

@@ -252,7 +252,7 @@ export function ScheduleView({
     <div className="mx-auto max-w-6xl space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-ink">스케줄</h1>
+          <h1 className="text-xl font-bold text-ink">캘린더</h1>
           <p className="mt-1 text-sm text-muted">
             일정·업무 마감·세금계산서 발행일을 한 캘린더에서 봅니다.
           </p>

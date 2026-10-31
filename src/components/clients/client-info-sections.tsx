@@ -105,12 +105,12 @@ export function ClientCard({
                   onClick={() => setKind(k)}
                   className={["rounded px-4 py-1 text-sm", kind === k ? "bg-surface font-semibold text-accent-deep shadow-sm" : "text-muted hover:text-ink"].join(" ")}
                 >
-                  {k === "client" ? "고객사" : "협업사"}
+                  {k === "client" ? "고객사" : "협력사"}
                 </button>
               ))}
             </div>
           ) : (
-            <span className="text-xs text-muted">0032_client_kind.sql 을 실행하면 고객사/협업사를 고를 수 있습니다.</span>
+            <span className="text-xs text-muted">0032_client_kind.sql 을 실행하면 고객사/협력사를 고를 수 있습니다.</span>
           )}
           {hasKind && kind !== (client.kind === "partner" ? "partner" : "client") && <span className="text-xs text-amber-700">아래 저장을 눌러야 반영됩니다</span>}
         </div>

@@ -15,7 +15,7 @@ export function ClientsIndex({ progress, warnings }: { progress: ClientProgress[
   const router = useRouter();
   const [filter, setFilter] = useState<"active" | "all">("active");
   const [kind, setKind] = useState<ClientKind>("client");
-  const kindReady = clients.some((c) => "kind" in c); // 0032 컬럼이 있을 때만 협업사로 만들 수 있다
+  const kindReady = clients.some((c) => "kind" in c); // 0032 컬럼이 있을 때만 협력사로 만들 수 있다
   const [q, setQ] = useState("");
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
@@ -50,7 +50,7 @@ export function ClientsIndex({ progress, warnings }: { progress: ClientProgress[
     <div className="mx-auto max-w-6xl space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-ink">고객사 · 협업사</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-ink">고객/협력사</h1>
           <p className="mt-1 text-sm text-muted">진행 상황과 다음 행동을 함께 확인하세요.</p>
         </div>
         <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
@@ -88,7 +88,7 @@ export function ClientsIndex({ progress, warnings }: { progress: ClientProgress[
       </div>
       {kind === "partner" && !kindReady && (
         <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          협업사 구분 칸이 아직 없습니다. supabase/migrations/0032_client_kind.sql 을 SQL Editor 에서 실행하면 협업사를 만들고 옮길 수 있습니다.
+          협력사 구분 칸이 아직 없습니다. supabase/migrations/0032_client_kind.sql 을 SQL Editor 에서 실행하면 협력사를 만들고 옮길 수 있습니다.
         </p>
       )}
 
@@ -117,7 +117,7 @@ export function ClientsIndex({ progress, warnings }: { progress: ClientProgress[
         <p className="text-sm text-muted">불러오는 중…</p>
       ) : visible.length === 0 ? (
         <p className="rounded-md border border-dashed border-border py-8 text-center text-sm text-muted">
-          {counts[kind] === 0 ? `${label}가 없습니다. 위에 이름을 적고 만들어 보세요.${kind === "partner" ? " 기존 고객사는 기본정보에서 구분을 협업사로 바꾸면 옮겨집니다." : ""}` : `조건에 맞는 ${label}가 없습니다.`}
+          {counts[kind] === 0 ? `${label}가 없습니다. 위에 이름을 적고 만들어 보세요.${kind === "partner" ? " 기존 고객사는 기본정보에서 구분을 협력사로 바꾸면 옮겨집니다." : ""}` : `조건에 맞는 ${label}가 없습니다.`}
         </p>
       ) : (
         <ClientProgressTable title={false} clients={visible.map((client) => progress.find((row) => row.id === client.id) ?? buildWorkspaceProgress({ clients: [client], tasks: [], contents: [], services: [], profiles: [], now: 0 }).clients[0])} />
