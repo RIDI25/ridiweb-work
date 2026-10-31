@@ -84,7 +84,7 @@ GEO 탭 = Peec AI(2026-09-28): `clients/[id]/geo/page.tsx` 가 `components/track
 측정 기록·추론·PDF(2026-09-07): SEO·GEO 탭 기본 보기 = `components/tracking/records-tab.tsx` — 날짜·시간별 측정 목록 → 고른 측정의 KPI·표면별 그래프·질문(검색어)별 표(`lib/tracker-digest.ts` 순수 함수로 요약, 서버·PDF 공용).
 측정 키워드·질문(2026-09-08): 고객사 › 기본정보 `components/clients/tracker-targets-card.tsx` — 메인 키워드 ≤5·서브 ≤20·질문 ≤20(의도 정보형/지역형/검색형/추천형 선택, 비우면 트래커가 추정)을 `tracker_targets`(0031)에 저장하고 `tracker_jobs` kind=targets 로 맥에 보낸다. 맥 `tracker/targets.py` 가 client.yaml 의 keywords(tier main/sub)·prompts 를 그 목록에 맞춘다(같은 글자는 id 유지, 없는 건 active:false, 새 건 새 id). 정리·한도는 `lib/tracker-targets.ts`(테스트 있음). 맥이 올리는 검색어 스냅샷은 `tracker_keywords`(0031). 저장된 게 없으면 맥의 현재 목록을 미리 채운다.
 '추론 생성' → `/api/tracker/insight` (Claude `REASONING_MODEL`=claude-fable-5-1, betas+fallbacks, 자료 다이제스트만 근거) → `tracker_insights`(0030). '리포트 PDF' → `/api/tracker/report-pdf` (@react-pdf/renderer, `lib/export/tracker-report-pdf.tsx`: 요약·표·직전 대비·12주 추이·추론, 고객사 전달용). 측정 묶음 로더는 `lib/tracker-server/load-run.ts`.
-DB: `supabase/migrations/0001~0033`. DDL은 SQL Editor에서 수동 실행 (0013=quotes, 0014=leads·app_settings, 0015=seo_diagnoses, 0016=deal_channels, 0017=tax_invoices, 0018=invoice_payments, 0019=client_services, 0020=channel_connection, 0021=tasks·task_templates, 0022=events, 0023=매출·영업 조회 팀 확대, 0024=ledger_entries, 0025=tracker_* 트래커 연동, 0026=보안·정합성 강화, 0027=승인 트리거 보완 + 권한 통일, 0028=회사 정보·월 약정·client_briefs, 0029=google_auto_fetch·tracker_worker, 0030=tracker_insights, 0031=tracker_targets·tracker_keywords, 0032=clients.kind 고객사/협업사). **0002 는 재실행 금지**(정책 전부 삭제).
+DB: `supabase/migrations/0001~0034`. DDL은 SQL Editor에서 수동 실행 (0013=quotes, 0014=leads·app_settings, 0015=seo_diagnoses, 0016=deal_channels, 0017=tax_invoices, 0018=invoice_payments, 0019=client_services, 0020=channel_connection, 0021=tasks·task_templates, 0022=events, 0023=매출·영업 조회 팀 확대, 0024=ledger_entries, 0025=tracker_* 트래커 연동, 0026=보안·정합성 강화, 0027=승인 트리거 보완 + 권한 통일, 0028=회사 정보·월 약정·client_briefs, 0029=google_auto_fetch·tracker_worker, 0030=tracker_insights, 0031=tracker_targets·tracker_keywords, 0032=clients.kind 고객사/협업사). **0002 는 재실행 금지**(정책 전부 삭제).
 각 기능 완료 시 빌드·타입체크 통과 후 커밋.
 
 
@@ -98,3 +98,6 @@ DB: `supabase/migrations/0001~0033`. DDL은 SQL Editor에서 수동 실행 (0013
 ## 셋업 (Supabase)
 `supabase/migrations/0001 → 0002 → 0003` 순서로 SQL Editor 실행. 이후 대시보드에서 owner/member
 계정 생성 → 각 `auth.users`에 대응하는 `profiles` 행 삽입(role 지정). 키는 `.env.local`에 입력.
+
+회의록·옵시디언 연결(2026-11-01): `/meetings`에서 팀 회의록 작성·고객사 연결·검색·수정·보관/복원·Markdown 내려받기를 지원한다. 비서 정리는 Fable 5.1로 초안만 만들고 사용자가 검토·적용·저장한다. 자동 업무 등록은 하지 않는다. 회의록 버전을 비교해 오래된 저장을 409로 거절하며, 브라우저 탭의 임시 초안을 복구할 수 있다.
+0034 적용 완료: `meeting_notes`는 팀 공유, `vault_notes`와 `vault_sync_state`는 `owner_id=auth.uid()`로 본인만 조회(두 owner 사이에도 분리). 웹에서는 볼트 사본을 수정할 수 없다. `scripts/obsidian-sync.mjs`가 맥의 전체 볼트에서 보이는 Markdown만 읽어 기존 서비스 키로 원자적으로 갱신한다. 숨김 파일·심볼릭 링크·1MB 초과 파일 제외, 스캔 실패 시 기존 검색 사본 유지, 정상 스캔에서 없어진 노트는 검색에서 제외. 원본 볼트에는 쓰지 않는다. 비서 `search_notes`/`read_note`는 사용자 RLS로 회의록·개인 볼트 검색 및 본문 조회, 출처 표기, 참고 자료 내부 명령 무시. 설치·중지 방법은 `docs/obsidian-connection.md`.
