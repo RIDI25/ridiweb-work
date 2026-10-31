@@ -32,6 +32,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/quotes", label: "견적서 · 계약서", parent: "/sales" },
   { href: "/schedule", label: "업무 · 일정", icon: "📅" },
   { href: "/tasks", label: "업무 보드", parent: "/schedule" },
+  { href: "/assistant", label: "비서 채팅", icon: "✦" },
   { href: "/meetings", label: "회의록", icon: "📝" },
   { href: "/revenue", label: "정산", icon: "💳" },
   { href: "/ledger", label: "장부", parent: "/revenue" },

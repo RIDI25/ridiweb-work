@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { ASSISTANT_MODEL, createAnthropic } from "@/lib/anthropic";
 import { ASSISTANT_TOOLS, executeAssistantTool } from "@/lib/assistant/tools";
-import { ACTION_SELECT, isWriteTool, type PendingAction } from "@/lib/assistant/action-types";
+import { ACTION_SELECT, isWriteTool, type PendingAction, uuidValue, textValue } from "@/lib/assistant/action-types";
 import { prepareAction } from "@/lib/assistant/prepare-action";
 import { logApiUsage } from "@/lib/usage";
 import type Anthropic from "@anthropic-ai/sdk";
@@ -15,6 +15,7 @@ const kstToday = () => new Date(Date.now() + 9 * 3_600_000).toISOString().slice(
 function buildSystem(role: string): string {
   return [
     "너는 옵티파이 워크스페이스의 내부 업무 비서이자 기획 파트너다. 조회는 바로 수행하고, 모든 등록·변경은 사용자가 확인할 초안만 만든다.",
+    "이 앱의 비서 채팅은 대화방별로 사용자 메시지·답변·작업 확인 결과를 자동 저장한다. 전용 비서 채팅 메뉴와 다른 화면의 하단 아이콘에서 같은 대화를 이어간다. 개인 볼트가 연결된 계정은 매주 월요일 오전 9시 한국 시간 이후, 맥이 켜져 연결되면 지난주 요약과 원문을 볼트에 보관한다. 파일 저장 확인 후 고정하지 않은 대화방만 앱 목록에서 정리한다. 새 메시지·진행 중 응답·유효한 확인 대기가 있는 대화방은 유지한다. 사용자가 대화 고정 버튼으로 고정한 대화방은 보관 후에도 남는다. 고정·해제는 사용자가 화면에서 하며 비서 도구로 바꿨다고 말하지 않는다.",
     "아이디어 정리, 고객 제안서 구성, 미팅 준비, 서비스 설계, 우선순위와 실행 계획을 대화로 함께 다듬는다. 목표·대상·제약을 바탕으로 구체적인 초안을 먼저 제시하고, 꼭 필요한 정보만 한두 가지씩 묻는다.",
     "확인된 사실과 가정·제안을 구분한다. 대화나 조회에 없는 고객 정보·진단 결과·과거 합의를 지어내지 않는다. 기획 의견이나 글 초안 작성은 채팅에서 바로 돕고, 사용자가 실제 등록·변경을 요청할 때만 변경 도구로 확인 초안을 만든다.",
     `오늘(KST): ${kstToday()} · 사용자 역할: ${role}`,
@@ -42,13 +43,30 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ ok: false, error: "다시 로그인해 주세요." }, { status: 401 });
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
   if (!profile) return NextResponse.json({ ok: false, error: "팀원 로그인이 필요합니다." }, { status: 403 });
-  let messages: { role: "user" | "assistant"; content: string }[];
+  let conversationId: string, requestId: string, message: string, context: string;
   try {
     const body = await req.json();
-    if (!Array.isArray(body.messages) || !body.messages.length || body.messages.length > 100 || body.messages.some((m: { role?: unknown; content?: unknown }) => !m || !["user", "assistant"].includes(String(m.role)) || typeof m.content !== "string" || !m.content.trim() || m.content.length > (m.role === "assistant" ? 40000 : 8000))) throw new Error();
-    messages = body.messages.slice(-20);
-    if (messages[messages.length - 1].role !== "user") throw new Error();
+    conversationId = uuidValue(body.conversationId); requestId = uuidValue(body.requestId);
+    message = textValue(body.message, "메시지", true, 8000)!;
+    context = textValue(body.context, "업무 대상", false, 200) || "전체 업무";
   } catch { return NextResponse.json({ ok: false, error: "메시지 내용을 확인해 주세요." }, { status: 400 }); }
+  const { data: turn, error: beginError } = await supabase.rpc("begin_assistant_turn", { p_conversation: conversationId, p_request: requestId, p_content: message, p_context: context });
+  if (beginError) return NextResponse.json({ ok: false, error: "대화를 저장하지 못했어요. 대화 목록을 다시 확인해 주세요." }, { status: 409 });
+  if (turn.status !== "started") {
+    if (turn.message_id) {
+      const { data } = await supabase.from("assistant_messages").select("metadata,content").eq("id", turn.message_id).single();
+      return NextResponse.json(data ? { ...data.metadata, text: data.content, saved: true } : { ok: false, error: "저장된 답변을 불러오지 못했어요." });
+    }
+    return NextResponse.json({ pending: true, error: "이 대화의 응답을 준비하고 있어요." }, { status: 202 });
+  }
+  async function finish(response: Record<string, unknown>) {
+    const { error } = await createAdminClient().rpc("finish_assistant_turn", { p_request: requestId, p_response: response });
+    if (error) return NextResponse.json({ ok: false, pending: true, error: "답변 저장을 확인하지 못했어요. 저장된 대화를 다시 확인합니다." }, { status: 503 });
+    return NextResponse.json({ ...response, saved: true }, { headers: { "Cache-Control": "no-store" } });
+  }
+  const historyResult = await supabase.from("assistant_messages").select("role,content,context").eq("conversation_id", conversationId).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(20);
+  if (historyResult.error) return finish({ ok: false, error: "저장된 대화를 불러오지 못했어요. 다시 요청해 주세요." });
+  const messages = (historyResult.data || []).reverse().map(m => ({ role: m.role as "user" | "assistant", content: m.role === "user" && m.context !== "전체 업무" ? `업무 대상 고객: ${m.context}\n${m.content}` : m.content }));
 
   const history: Anthropic.MessageParam[] = messages.map((m) => ({ role: m.role, content: m.content }));
   const actions: { name: string; ok: boolean; summary: string }[] = [];
@@ -59,12 +77,12 @@ export async function POST(req: NextRequest) {
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       const response = await anthropic.messages.create({ model: ASSISTANT_MODEL, max_tokens: 8192, system: buildSystem(profile.role), tools: ASSISTANT_TOOLS, messages: history });
       inputTokens += response.usage.input_tokens; outputTokens += response.usage.output_tokens;
-      if (response.stop_reason === "refusal") return NextResponse.json({ ok: false, error: "모델이 이 요청에 답하지 않았어요. 요청 내용을 바꾸어 다시 시도해 주세요.", actions, pendingActions });
+      if (response.stop_reason === "refusal") return finish({ ok: false, error: "모델이 이 요청에 답하지 않았어요. 요청 내용을 바꾸어 다시 시도해 주세요.", actions, pendingActions });
       const uses = response.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
       if (!uses.length) {
         const text = response.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
-        if (!text) return NextResponse.json({ ok: false, error: "답변을 완성하지 못했어요. 기획 범위를 나누어 다시 요청해 주세요.", actions, pendingActions });
-        return NextResponse.json({ ok: true, text: response.stop_reason === "max_tokens" ? `${text}\n\n답변 길이 제한에 도달했어요. 이어서 정리해 달라고 요청해 주세요.` : text, actions, pendingActions });
+        if (!text) return finish({ ok: false, error: "답변을 완성하지 못했어요. 기획 범위를 나누어 다시 요청해 주세요.", actions, pendingActions });
+        return finish({ ok: true, text: response.stop_reason === "max_tokens" ? `${text}\n\n답변 길이 제한에 도달했어요. 이어서 정리해 달라고 요청해 주세요.` : text, actions, pendingActions });
       }
       const results: Anthropic.ToolResultBlockParam[] = [];
       let requestedWrite = false;
@@ -74,7 +92,7 @@ export async function POST(req: NextRequest) {
           requestedWrite = true;
           try {
             const prepared = await prepareAction(supabase, use.name, input, { userId: user.id, role: profile.role, today: kstToday() });
-            const { data, error } = await createAdminClient().from("assistant_action_requests").insert({ user_id: user.id, tool_name: use.name, ...prepared }).select(ACTION_SELECT).single();
+            const { data, error } = await createAdminClient().from("assistant_action_requests").insert({ user_id: user.id, conversation_id: conversationId, tool_name: use.name, ...prepared }).select(ACTION_SELECT).single();
             if (error || !data) throw new Error("확인 초안을 저장하지 못했습니다. 데이터베이스 설정과 연결을 확인해 주세요. 업무에는 반영하지 않았습니다.");
             pendingActions.push(data as PendingAction);
           } catch (error) {
@@ -87,13 +105,13 @@ export async function POST(req: NextRequest) {
         }
       }
       // Do not let the model repeat a write or describe a pending draft as already executed.
-      if (requestedWrite) return NextResponse.json({ ok: true, text: pendingActions.length ? "확인할 초안을 준비했어요. 내용을 검토하고 '확인 후 반영'을 눌러 주세요." : "초안을 준비하려면 아래 내용을 먼저 확인해 주세요.", actions, pendingActions });
-      if (uses.length > 8) return NextResponse.json({ ok: true, text: "한 번에 요청할 항목을 나눠 주세요.", actions, pendingActions });
+      if (requestedWrite) return finish({ ok: true, text: pendingActions.length ? "확인할 초안을 준비했어요. 내용을 검토하고 '확인 후 반영'을 눌러 주세요." : "초안을 준비하려면 아래 내용을 먼저 확인해 주세요.", actions, pendingActions });
+      if (uses.length > 8) return finish({ ok: true, text: "한 번에 요청할 항목을 나눠 주세요.", actions, pendingActions });
       history.push({ role: "assistant", content: response.content }, { role: "user", content: results });
     }
-    return NextResponse.json({ ok: true, text: "조회 범위가 넓어 처리를 멈췄어요. 대상을 조금 좁혀 주세요.", actions, pendingActions });
-  } catch (error) {
-    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "비서 처리 실패", actions, pendingActions });
+    return finish({ ok: true, text: "조회 범위가 넓어 처리를 멈췄어요. 대상을 조금 좁혀 주세요.", actions, pendingActions });
+  } catch {
+    return finish({ ok: false, error: "비서가 답변을 완료하지 못했어요. 요청은 대화에 저장돼 있어요.", actions, pendingActions });
   } finally {
     if (inputTokens || outputTokens) await logApiUsage({ userId: user.id, clientId: null, provider: "anthropic", model: ASSISTANT_MODEL, inputTokens, outputTokens }).catch(() => undefined);
   }

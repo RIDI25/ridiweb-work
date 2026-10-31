@@ -55,6 +55,7 @@ interface EventDraft {
  */
 export function ScheduleView({
   me,
+  today,
   initialEvents,
   tasks,
   invoices,
@@ -62,6 +63,7 @@ export function ScheduleView({
   profiles,
 }: {
   me: { id: string };
+  today: string;
   initialEvents: CalendarEvent[];
   tasks: {
     id: string;
@@ -76,11 +78,10 @@ export function ScheduleView({
 }) {
   const supabase = createClient();
   const [events, setEvents] = useState<CalendarEvent[]>(initialEvents);
-  const [anchor, setAnchor] = useState<Date>(new Date());
+  const [anchor, setAnchor] = useState<Date>(() => new Date(`${today}T12:00:00`));
   const [view, setView] = useState<"month" | "week">("month");
   const [msg, setMsg] = useState("");
 
-  const today = ymdOf(new Date());
   const emptyDraft: EventDraft = {
     title: "",
     event_date: today,
@@ -396,7 +397,7 @@ export function ScheduleView({
             ◀
           </button>
           <button
-            onClick={() => setAnchor(new Date())}
+            onClick={() => setAnchor(new Date(`${today}T12:00:00`))}
             className="rounded-md border border-border px-2.5 py-1 text-sm text-muted hover:text-ink"
           >
             오늘

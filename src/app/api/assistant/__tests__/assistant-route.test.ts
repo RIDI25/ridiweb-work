@@ -1,24 +1,44 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-const f = vi.hoisted(() => ({ model: vi.fn(), read: vi.fn(), prepare: vi.fn(), insert: vi.fn(), save: vi.fn(), usage: vi.fn() }));
+const f = vi.hoisted(() => ({ model: vi.fn(), read: vi.fn(), prepare: vi.fn(), insert: vi.fn(), save: vi.fn(), usage: vi.fn(), begin: vi.fn(), finish: vi.fn(), history: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({
-  createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { id: "me" } } }) }, from: () => ({ select: () => ({ eq: () => ({ single: async () => ({ data: { role: "owner" } }) }) }) }) }),
-  createAdminClient: () => ({ from: () => ({ insert: (payload: unknown) => { f.insert(payload); return { select: () => ({ single: f.save }) }; } }) }),
+  createClient: async () => ({
+    auth: { getUser: async () => ({ data: { user: { id: "me" } } }) }, rpc: f.begin,
+    from: (table: string) => table === "profiles" ? { select: () => ({ eq: () => ({ single: async () => ({ data: { role: "owner" } }) }) }) } : { select: () => ({ eq: () => ({ order: () => ({ order: () => ({ limit: f.history }) }) }) }) },
+  }),
+  createAdminClient: () => ({ rpc: f.finish, from: () => ({ insert: (payload: unknown) => { f.insert(payload); return { select: () => ({ single: f.save }) }; } }) }),
 }));
 vi.mock("@/lib/anthropic", async (importOriginal) => ({ ...await importOriginal<typeof import("@/lib/anthropic")>(), createAnthropic: () => ({ messages: { create: f.model } }) }));
 vi.mock("@/lib/assistant/tools", () => ({ ASSISTANT_TOOLS: [], executeAssistantTool: f.read }));
 vi.mock("@/lib/assistant/prepare-action", () => ({ prepareAction: f.prepare }));
 vi.mock("@/lib/usage", () => ({ logApiUsage: f.usage }));
 import { POST } from "../route";
-const request = (messages = [{ role: "user", content: "업무를 등록해줘" }]) => new NextRequest("http://localhost/api/assistant", { method: "POST", body: JSON.stringify({ messages }) });
+const request = (messages = [{ role: "user", content: "업무를 등록해줘" }]) => {
+  f.history.mockResolvedValue({ data: [...messages].reverse().map(m => ({ ...m, context: "전체 업무" })), error: null });
+  return new NextRequest("http://localhost/api/assistant", { method: "POST", body: JSON.stringify({ conversationId: "10000000-0000-4000-8000-000000000001", requestId: "10000000-0000-4000-8000-000000000002", message: messages.at(-1)!.content }) });
+};
 beforeEach(() => {
   vi.clearAllMocks();
+  f.begin.mockResolvedValue({ data: { status: "started" }, error: null });
+  f.finish.mockResolvedValue({ data: "saved-message", error: null });
   f.model.mockResolvedValue({ usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: "text", text: "등록 완료했습니다" }, { type: "tool_use", id: "tool1", name: "create_task", input: { title: "점검" } }] });
   f.prepare.mockResolvedValue({ payload: { title: "점검", assignee_id: "me" }, display: { title: "업무 등록", fields: [{ label: "제목", value: "점검" }] } });
   f.save.mockResolvedValue({ data: { id: "draft", status: "pending" }, error: null });
   f.usage.mockResolvedValue(undefined);
 });
 describe("assistant write gate", () => {
+  it("never calls a model when the user message could not be saved", async () => {
+    f.begin.mockResolvedValue({ error: { message: "offline" } });
+    const response = await POST(request()); expect(response.status).toBe(409); expect(f.model).not.toHaveBeenCalled();
+  });
+  it("deduplicates an in-flight request without calling the model twice", async () => {
+    f.begin.mockResolvedValue({ data: { status: "running" } });
+    const response = await POST(request()); expect(response.status).toBe(202); expect(f.model).not.toHaveBeenCalled();
+  });
+  it("persists provider failures as part of the conversation", async () => {
+    f.model.mockRejectedValue(new Error("provider unavailable")); await POST(request());
+    expect(f.finish).toHaveBeenCalledWith("finish_assistant_turn", expect.objectContaining({p_response: expect.objectContaining({ok:false})}));
+  });
   it("continues a long planning conversation on Fable without creating work records", async () => {
     f.model.mockResolvedValue({ usage: { input_tokens: 1, output_tokens: 1 }, stop_reason: "end_turn", content: [{ type: "text", text: "제안서는 목표, 진단 요약, 실행 범위, 일정 순서로 구성해 봅시다." }] });
     const response = await POST(request([{ role: "assistant", content: "기획 초안. ".repeat(2000) }, { role: "user", content: "이어서 미팅용 제안서 구성을 다듬어줘" }]));

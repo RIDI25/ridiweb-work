@@ -1,10 +1,11 @@
-// Local-only bridge. No HTTP listener; never writes to the Obsidian vault.
+// Local-only bridge. No HTTP listener. Existing notes are read-only; weekly chat archives use a dedicated folder.
 import { readFile, readdir, lstat, realpath, open, mkdir, writeFile, rename, unlink } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { resolve, relative, join, basename, dirname, isAbsolute } from 'node:path';
 import { createHash } from 'node:crypto';
 import { parseEnv } from 'node:util';
 import { pathToFileURL } from 'node:url';
+import { archiveAssistant } from './assistant-archive.mjs';
 
 export const hash = text => createHash('sha256').update(text).digest('hex');
 export async function scanVault(vaultPath) {
@@ -81,6 +82,7 @@ async function main(configPath) {
       await rename(cachePath + '.tmp', cachePath);
       console.log(`${new Date().toISOString()} 연결 완료: ${snapshot.notes.length}개, 제외 ${snapshot.skipped}개`);
     }
+    await archiveAssistant({ api, config, env }).catch(() => { console.error(`${new Date().toISOString()} 주간 대화 보관 확인 필요. 대화는 유지됩니다.`); });
   } catch (error) {
     // Keep the previous index intact on any scan/network failure. Never log contents or credentials.
     await api(`vault_sync_state?owner_id=eq.${encodeURIComponent(config.ownerId)}`, 'PATCH', { last_attempt_at: new Date().toISOString(), error: '맥의 볼트 연결을 확인해 주세요. 마지막으로 반영된 자료를 표시합니다.' }).catch(() => undefined);

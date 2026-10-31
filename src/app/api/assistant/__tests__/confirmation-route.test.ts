@@ -10,7 +10,7 @@ describe("confirmation route", () => {
   it("uses only stored request ID and decision, ignoring forged payload", async () => {
     const response = await POST(request({ id, decision: "confirm", payload: { amount: 999999 }, tool_name: "add_invoice_payment", user_id: "other" }));
     expect(response.status).toBe(200);
-    expect(mocks.rpc).toHaveBeenCalledWith("resolve_assistant_action", { request_id: id, decision: "confirm" });
+    expect(mocks.rpc).toHaveBeenCalledWith("resolve_chat_assistant_action", { request_id: id, decision: "confirm" });
     expect(response.headers.get("cache-control")).toBe("no-store");
   });
   it("requires both login and team membership", async () => {

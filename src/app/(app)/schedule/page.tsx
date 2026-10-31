@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { ScheduleView } from "@/components/schedule/schedule-view";
 import type { CalendarEvent } from "@/types/database";
 
+const kstToday = () => new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+
 export default async function SchedulePage() {
   const profile = await requireProfile();
   const supabase = await createClient();
@@ -26,6 +28,7 @@ export default async function SchedulePage() {
   return (
     <ScheduleView
       me={{ id: profile.id }}
+      today={kstToday()}
       initialEvents={(eventsRes.data ?? []) as CalendarEvent[]}
       tasks={
         (tasksRes.data ?? []) as {
