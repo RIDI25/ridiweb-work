@@ -5,6 +5,8 @@ const PRICING: Record<string, { input: number; output: number }> = {
   "claude-sonnet-4-6": { input: 3, output: 15 },
   "claude-haiku-4-5": { input: 1, output: 5 },
   "claude-fable-5": { input: 10, output: 50 },
+  // https://platform.claude.com/docs/en/models/fable-5-1/overview (2026-11-01)
+  "claude-fable-5-1": { input: 10, output: 50 },
   // OpenAI GPT-5.6 Sol — 프로모션가($4/$20, ~2026-11-21). 이후 정가 $5/$30
   "gpt-5.6-sol": { input: 4, output: 20 },
 };

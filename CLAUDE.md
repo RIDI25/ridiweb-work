@@ -44,7 +44,7 @@ Phase 1 완료(생성 엔진·WP/네이버/스레드·키워드·플랜·라이�
 팀 운영 축(owner·member 공용): /tasks 업무 보드(목록·칸반 드래그, 레지스트리 `lib/tasks.ts`) + 반복 업무 템플릿(월 운영
 계약 연결, `/api/tasks/cron`이 매일 KST 00:20에 발행일 체크 — vercel.json crons) + /schedule 캘린더(events+업무
 마감+계산서 발행일 병합, 레지스트리 `lib/schedule.ts`) + 대시보드 '이번 주 업무' 위젯.
-AI 비서(우하단 위젯 → `/api/assistant`, Claude Opus 5 tool-use 루프, 도구는 `lib/assistant/tools.ts` 레지스트리):
+AI 비서(상시 패널 → `/api/assistant`, Claude Fable 5.1 tool-use 루프, 도구는 `lib/assistant/tools.ts` 레지스트리):
 세금계산서·입금·리드 등록 + 업무·일정 등록/조회/상태 변경 + 매출 요약(owner 전용). 실행은 사용자 세션 → RLS 적용.
 /sales·/revenue는 member도 조회 가능(0023 — select 팀, 쓰기 owner. 페이지는 readOnly 모드로 편집 UI 숨김).
 /ledger 회계 장부(팀 공용 기입, 레지스트리 `lib/ledger.ts`): 입금·지출·카드 내역 수기 기입 + 세금계산서
@@ -92,6 +92,8 @@ DB: `supabase/migrations/0001~0033`. DDL은 SQL Editor에서 수동 실행 (0013
 0033 적용 완료(2026-11-01): `riblksexnoijlgruviqi` / optify_workspace의 main DB에 SQL Editor로 적용. 사전 조회에서 관련 테이블·함수·트리거가 모두 없음을 확인해, 0033의 존재하지 않는 규칙 제거 구문 5개를 생략하고 함수는 신규 생성하여 동일한 최종 구조를 만들었다. 새 저장 항목 API 200 및 로그인 없는 승인 요청 차단 확인. 로컬 검증 42개 + 임시 PostgreSQL 검증 12개, 빌드·PC/모바일 화면 검증 통과. 운영 웹 배포는 `RIDI25/optify_workspace`의 `main` 브랜치에 연결된 Vercel `optify-workspace` 프로젝트를 사용한다. 운영 주소는 https://optify-workspace-sepia.vercel.app/ 이며, 최신 적용 커밋과 배포 성공 여부는 Vercel에서 확인한다.
 
 운영 확인(2026-11-01): 리뉴얼 첫 커밋 `17a02ac`의 Vercel Production Ready 및 기존 운영 도메인 연결, 실제 로그인 후 홈·고객 목록·비서 업무/일정 조회와 메뉴 이동 시 대화 유지 확인. 홈 달력은 서버에서 계산한 한국 날짜를 전달해 서버 UTC와 브라우저 KST의 월·일 불일치를 방지한다. 10월 말 UTC/11월 초 KST 경계의 렌더 결과 일치 검증 통과.
+
+비서 기획 지원(2026-11-01): `lib/anthropic.ts`의 `ASSISTANT_MODEL=claude-fable-5-1`을 사용한다. 계정 모델 목록에서 사용 가능 확인. 업무 처리에 더해 아이디어·제안서·미팅·우선순위를 대화로 정리하며 기획 제안만으로 업무를 등록하지 않는다. 실제 등록·변경은 기존 확인 버튼 절차를 유지한다. 추론과 기획 답변을 위해 출력 한도 8,192토큰, 대화에 포함되는 비서 답변은 최대 40,000자로 허용(사용자 메시지 8,000자, 최근 20개 전달). Fable 5.1 공식 입력/출력 단가를 비용 추정에 추가. 채팅 안내와 제안서 기획 시작 버튼 반영.
 
 ## 셋업 (Supabase)
 `supabase/migrations/0001 → 0002 → 0003` 순서로 SQL Editor 실행. 이후 대시보드에서 owner/member

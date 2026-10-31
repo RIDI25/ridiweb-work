@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { createAnthropic } from "@/lib/anthropic";
+import { ASSISTANT_MODEL, createAnthropic } from "@/lib/anthropic";
 import { ASSISTANT_TOOLS, executeAssistantTool } from "@/lib/assistant/tools";
 import { ACTION_SELECT, isWriteTool, type PendingAction } from "@/lib/assistant/action-types";
 import { prepareAction } from "@/lib/assistant/prepare-action";
@@ -9,13 +9,14 @@ import type Anthropic from "@anthropic-ai/sdk";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
-const ASSISTANT_MODEL = "claude-opus-5";
 const MAX_TOOL_ROUNDS = 6;
 const kstToday = () => new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10);
 
 function buildSystem(role: string): string {
   return [
-    "너는 옵티파이 워크스페이스의 내부 업무 비서다. 조회는 바로 수행하고, 모든 등록·변경은 사용자가 확인할 초안만 만든다.",
+    "너는 옵티파이 워크스페이스의 내부 업무 비서이자 기획 파트너다. 조회는 바로 수행하고, 모든 등록·변경은 사용자가 확인할 초안만 만든다.",
+    "아이디어 정리, 고객 제안서 구성, 미팅 준비, 서비스 설계, 우선순위와 실행 계획을 대화로 함께 다듬는다. 목표·대상·제약을 바탕으로 구체적인 초안을 먼저 제시하고, 꼭 필요한 정보만 한두 가지씩 묻는다.",
+    "확인된 사실과 가정·제안을 구분한다. 대화나 조회에 없는 고객 정보·진단 결과·과거 합의를 지어내지 않는다. 기획 의견이나 글 초안 작성은 채팅에서 바로 돕고, 사용자가 실제 등록·변경을 요청할 때만 변경 도구로 확인 초안을 만든다.",
     `오늘(KST): ${kstToday()} · 사용자 역할: ${role}`,
     "변경 도구를 호출해도 아직 실행되지 않는다. 화면의 '확인 후 반영' 버튼을 눌러야 실행된다. 채팅으로 '확인/진행해'라고 해도 직접 실행하지 않는다. 초안을 만들고 완료·등록됐다고 말하지 않는다.",
     "기존 확인 초안을 수정하려면 기존 초안의 '수정하기' 버튼으로 취소한 뒤 새 초안을 만든다. 도구 범위 밖의 일을 완료했다고 말하지 않는다.",
@@ -28,7 +29,7 @@ function buildSystem(role: string): string {
     "고객·제작사 응답을 기다리면 set_task_waiting에 사유와 재확인일을 넣는다. 대기 해제는 waiting_on none이며 업무 완료와 별개다.",
     "입금 kind는 착수금 deposit / 잔금 balance / 전액 full / 기타 other. 금액·날짜를 추측하지 않는다.",
     "조회 실패를 기록 없음으로 설명하지 않는다. 조회 결과는 표시된 범위 기준이며 전체 건수로 단정하지 않는다.",
-    "도구 밖 콘텐츠·진단·견적 작성은 해당 고객 또는 영업 메뉴로 안내한다. 한국어로 짧고 담백하게 답한다.",
+    "도구로 지원하지 않는 진단 실행·문서 파일 생성·저장·발송은 수행했다고 말하지 말고 해당 고객 또는 영업 메뉴로 안내한다. 구성·문구·기획 초안은 채팅에서 직접 제공한다. 한국어로 담백하게 답하고, 복잡한 기획은 비교안·결정할 점·다음 단계가 드러나도록 충분히 설명한다.",
   ].join("\n");
 }
 
@@ -43,7 +44,7 @@ export async function POST(req: NextRequest) {
   let messages: { role: "user" | "assistant"; content: string }[];
   try {
     const body = await req.json();
-    if (!Array.isArray(body.messages) || !body.messages.length || body.messages.length > 100 || body.messages.some((m: { role?: unknown; content?: unknown }) => !m || !["user", "assistant"].includes(String(m.role)) || typeof m.content !== "string" || !m.content.trim() || m.content.length > 8000)) throw new Error();
+    if (!Array.isArray(body.messages) || !body.messages.length || body.messages.length > 100 || body.messages.some((m: { role?: unknown; content?: unknown }) => !m || !["user", "assistant"].includes(String(m.role)) || typeof m.content !== "string" || !m.content.trim() || m.content.length > (m.role === "assistant" ? 40000 : 8000))) throw new Error();
     messages = body.messages.slice(-20);
     if (messages[messages.length - 1].role !== "user") throw new Error();
   } catch { return NextResponse.json({ ok: false, error: "메시지 내용을 확인해 주세요." }, { status: 400 }); }
@@ -55,12 +56,14 @@ export async function POST(req: NextRequest) {
   try {
     const anthropic = createAnthropic();
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      const response = await anthropic.messages.create({ model: ASSISTANT_MODEL, max_tokens: 2000, system: buildSystem(profile.role), tools: ASSISTANT_TOOLS, messages: history });
+      const response = await anthropic.messages.create({ model: ASSISTANT_MODEL, max_tokens: 8192, system: buildSystem(profile.role), tools: ASSISTANT_TOOLS, messages: history });
       inputTokens += response.usage.input_tokens; outputTokens += response.usage.output_tokens;
+      if (response.stop_reason === "refusal") return NextResponse.json({ ok: false, error: "모델이 이 요청에 답하지 않았어요. 요청 내용을 바꾸어 다시 시도해 주세요.", actions, pendingActions });
       const uses = response.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
       if (!uses.length) {
         const text = response.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
-        return NextResponse.json({ ok: true, text: text || "요청 내용을 다시 알려 주세요.", actions, pendingActions });
+        if (!text) return NextResponse.json({ ok: false, error: "답변을 완성하지 못했어요. 기획 범위를 나누어 다시 요청해 주세요.", actions, pendingActions });
+        return NextResponse.json({ ok: true, text: response.stop_reason === "max_tokens" ? `${text}\n\n답변 길이 제한에 도달했어요. 이어서 정리해 달라고 요청해 주세요.` : text, actions, pendingActions });
       }
       const results: Anthropic.ToolResultBlockParam[] = [];
       let requestedWrite = false;

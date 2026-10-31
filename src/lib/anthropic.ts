@@ -3,6 +3,9 @@ import Anthropic from "@anthropic-ai/sdk";
 /** 콘텐츠 생성 기본 모델. 날짜 접미사 붙이지 말 것. */
 export const GENERATION_MODEL = "claude-fable-5";
 
+/** 업무 조회·확인 초안·기획 대화를 함께 맡는 비서 모델. */
+export const ASSISTANT_MODEL = "claude-fable-5-1";
+
 /**
  * Fable 5는 안전 분류기가 요청을 거부(stop_reason: refusal)할 수 있어
  * 서버측 폴백을 기본 적용한다 — 거부 시 같은 요청을 Opus 4.8이 이어받는다.

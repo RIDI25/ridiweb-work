@@ -129,10 +129,11 @@ export function AssistantWidget({ expanded, onToggleExpanded }: { expanded: bool
       </div>
       <div id="assistant-log" ref={log} className={styles.log} role="log" aria-label="비서와의 대화" aria-live="polite" aria-relevant="additions">
         {messages.length === 0 && <div className={styles.welcome}>
-          <strong>보고 있는 업무를 바로 맡겨주세요.</strong>
-          <p>고객을 옮겨도 대화는 이어집니다. 업무·일정·정산을 조회하거나 등록할 수 있어요.</p>
+          <strong>업무도 기획도 함께 정리해요.</strong>
+          <p>아이디어와 제안서 구성을 함께 다듬고, 업무·일정·정산도 처리할 수 있어요. 고객을 옮겨도 대화는 이어집니다.</p>
           <div className={styles.suggestions}>
             <button type="button" disabled={targetMissing || busy} onClick={() => void send("오늘 확인할 업무를 알려줘")}>오늘 확인할 업무 알려줘</button>
+            <button type="button" onClick={() => setInput("고객 미팅 제안서 구성을 같이 잡아보자. 목표와 고객 상황부터 한 가지씩 확인해줘.")}>제안서 기획 함께하기 →</button>
             <button type="button" onClick={() => setInput("이 고객 점검 업무를 동생에게 내일까지 맡겨줘")}>점검 업무를 동생에게 맡기기 →</button>
           </div>
         </div>}
@@ -151,7 +152,7 @@ export function AssistantWidget({ expanded, onToggleExpanded }: { expanded: bool
         <label htmlFor="assistant-input">비서에게 바로 요청하기</label>
         <textarea id="assistant-input" value={input} maxLength={4000} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => {
           if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); }
-        }} rows={3} placeholder="예: 내일까지 점검할 업무를 등록해줘" />
+        }} rows={3} placeholder="예: 고객 미팅 제안서 구성을 같이 잡아보자" />
         <div className={styles.compose}><span>Enter 전송 · Shift+Enter 줄바꿈</span><button type="submit" disabled={busy || targetMissing || !input.trim()}>보내기</button></div>
       </form>
     </aside>
