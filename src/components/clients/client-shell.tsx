@@ -62,12 +62,12 @@ export function ClientShell({ id, children }: { id: string; children: ReactNode 
           › {client?.name ?? "…"}
         </p>
         <div className="mt-1 flex flex-wrap items-center gap-2">
-          <h1 className="text-xl font-bold text-ink">{client?.name ?? "불러오는 중…"}</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-ink">{client?.name ?? "불러오는 중…"}</h1>
           {client?.is_internal && (
-            <span className="rounded bg-subtle px-1.5 py-0.5 text-[11px] font-medium text-muted">내부</span>
+            <span className="rounded bg-subtle px-1.5 py-0.5 text-xs font-medium text-muted">내부</span>
           )}
           {client && client.status !== "active" && (
-            <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+            <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
               {client.status === "paused" ? "일시중지" : "종료"}
             </span>
           )}
@@ -77,14 +77,14 @@ export function ClientShell({ id, children }: { id: string; children: ReactNode 
               <span
                 key={s.id}
                 title={def?.description ?? s.service_type}
-                className="rounded-full bg-tint px-2 py-0.5 text-[11px] font-semibold text-accent-deep"
+                className="rounded-full bg-tint px-2 py-0.5 text-xs font-semibold text-accent-deep"
               >
                 {def ? `${def.emoji} ${def.label}` : s.service_type}
               </span>
             );
           })}
           {services.id === id && activeServices.length === 0 && (
-            <Link href={clientPath(id, "info")} className="text-[11px] text-muted hover:text-accent-deep hover:underline">
+            <Link href={clientPath(id, "info")} className="text-xs text-muted hover:text-accent-deep hover:underline">
               진행중 계약 없음 · 기본정보에서 등록
             </Link>
           )}

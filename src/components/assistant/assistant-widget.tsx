@@ -1,149 +1,159 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { parseClientPath } from "@/lib/nav";
+import { useClientContext } from "@/components/providers/client-context";
+import { ActionCard } from "./action-card";
+import type { PendingAction } from "@/lib/assistant/action-types";
+import styles from "./assistant-widget.module.css";
 
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  context?: string;
   actions?: { name: string; ok: boolean; summary: string }[];
 }
 
-const GREETING =
-  "무엇을 도와드릴까요? 예)\n· 오늘 OO기획에 550만원 세금계산서 발행했어, 등록해줘\n· OO기획에서 선금 300만원 입금됐어\n· 동생한테 OO치과 블로그 발행 시켜놔, 금요일까지\n· 수요일 2시 OO기획 미팅 잡아줘\n· 다음 주 일정 뭐 있어?";
-
-/** 워크스페이스 비서 — 우하단 플로팅 챗. 자연어로 매출·입금·리드 등록 */
-export function AssistantWidget() {
-  const [open, setOpen] = useState(false);
+export function AssistantWidget({ expanded, onToggleExpanded }: { expanded: boolean; onToggleExpanded: () => void }) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const { clients } = useClientContext();
+  const screenClientId = parseClientPath(pathname)?.clientId;
+  const [target, setTarget] = useState("auto");
+  const selectedId = target === "auto" ? screenClientId : target;
+  const selected = clients.find((client) => client.id === selectedId);
+  const targetMissing = (target === "auto" ? !!screenClientId : target !== "all") && !selected;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const [pendingActions, setPendingActions] = useState<PendingAction[]>([]);
+  const [actionError, setActionError] = useState("");
+  const [resolving, setResolving] = useState(false);
+  const actionLock = useRef(false);
+  const sending = useRef(false);
+  const log = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, busy]);
+    if (log.current) log.current.scrollTop = log.current.scrollHeight;
+  }, [messages, busy, pendingActions]);
 
-  async function send() {
-    const text = input.trim();
-    if (!text || busy) return;
-    const next: ChatMessage[] = [...messages, { role: "user", content: text }];
+  async function loadActions() {
+    try {
+      const response = await fetch("/api/assistant/actions", { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "확인 초안을 불러오지 못했어요.");
+      setPendingActions((previous) => {
+        const merged = new Map(previous.map((action) => [action.id, action]));
+        for (const action of data.actions ?? []) merged.set(action.id, action);
+        return [...merged.values()].sort((a, b) => a.created_at.localeCompare(b.created_at));
+      });
+      setActionError(data.more ? "확인할 초안이 많아 일부만 표시합니다. 처리 후 목록을 다시 불러와 주세요." : "");
+    } catch (error) { setActionError(error instanceof Error ? error.message : "확인 초안을 불러오지 못했어요."); }
+  }
+  useEffect(() => { void loadActions(); }, []);
+
+  async function resolveAction(action: PendingAction, decision: "confirm" | "cancel" | "edit") {
+    if (actionLock.current) return;
+    actionLock.current = true; setResolving(true); setActionError("");
+    try {
+      const response = await fetch("/api/assistant/actions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: action.id, decision: decision === "edit" ? "cancel" : decision }) });
+      const data = await response.json();
+      if (!response.ok || !data.action) throw new Error(data.error || "처리 결과를 확인하지 못했어요. 목록을 다시 불러와 주세요.");
+      const updated = data.action as PendingAction;
+      setPendingActions((previous) => previous.map((item) => item.id === updated.id ? updated : item));
+      if (updated.status === "succeeded") {
+        router.refresh();
+        setMessages((previous) => [...previous, { role: "assistant", content: `${action.display.title}: ${updated.result?.message ?? "반영 완료"}` }]);
+      }
+      if (decision === "edit" && updated.status === "cancelled") {
+        setInput(`이 내용으로 새 초안을 만들어줘.\n${action.display.title}\n${action.display.fields.map((field) => `${field.label}: ${field.value}`).join("\n")}\n수정할 내용: `);
+        document.getElementById("assistant-input")?.focus();
+      }
+    } catch (error) { setActionError(error instanceof Error ? error.message : "처리 결과를 확인하지 못했어요. 목록을 다시 불러와 주세요."); }
+    finally { actionLock.current = false; setResolving(false); }
+  }
+
+  async function send(text = input) {
+    text = text.trim();
+    if (!text || sending.current || targetMissing) return;
+    const context = selected?.name ?? "전체 업무";
+    const next: ChatMessage[] = [...messages, { role: "user", content: text, context }];
+    sending.current = true;
     setMessages(next);
     setInput("");
     setBusy(true);
     try {
-      const res = await fetch("/api/assistant", {
+      const response = await fetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: next.map((m) => ({ role: m.role, content: m.content })),
-        }),
+        body: JSON.stringify({ messages: next.slice(-20).map((message) => ({
+          role: message.role,
+          content: message.role === "user" && message.context !== "전체 업무"
+            ? `업무 대상 고객: ${message.context}\n${message.content}` : message.content,
+        })) }),
       });
-      const d = await res.json();
-      setMessages((prev) => [
-        ...prev,
-        d.ok
-          ? { role: "assistant", content: d.text, actions: d.actions }
-          : { role: "assistant", content: `오류: ${d.error ?? "처리 실패"}`, actions: d.actions },
-      ]);
-    } catch (e) {
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: e instanceof Error ? e.message : "네트워크 오류" },
-      ]);
+      if (response.status === 401 || response.status === 403) throw new Error("로그인 상태를 확인한 뒤 다시 요청해 주세요.");
+      if (!response.ok) throw new Error("요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.");
+      const data = await response.json();
+      setMessages((previous) => [...previous, { role: "assistant", context,
+        content: data.ok ? data.text : `처리하지 못했어요: ${data.error ?? "다시 확인해 주세요."}`,
+        actions: data.actions,
+      }]);
+      if (data.pendingActions?.length) setPendingActions((previous) => {
+        const merged = new Map(previous.map((action) => [action.id, action]));
+        for (const action of data.pendingActions) merged.set(action.id, action);
+        return [...merged.values()];
+      });
+    } catch (error) {
+      setMessages((previous) => [...previous, { role: "assistant", context, content: error instanceof Error ? error.message : "연결을 확인한 뒤 다시 시도해 주세요." }]);
     } finally {
+      sending.current = false;
       setBusy(false);
     }
   }
 
   return (
-    <>
-      {/* 플로팅 버튼 */}
-      <button
-        onClick={() => setOpen((v) => !v)}
-        aria-label="워크스페이스 비서"
-        className="fixed bottom-5 right-5 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-accent-deep text-xl text-white shadow-lg transition-transform hover:scale-105"
-      >
-        {open ? "✕" : "🤖"}
-      </button>
-
-      {open && (
-        <div className="fixed bottom-20 right-5 z-40 flex h-[min(560px,75vh)] w-[min(380px,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-2xl">
-          <div className="flex items-center justify-between border-b border-border bg-tint/50 px-4 py-2.5">
-            <p className="text-sm font-bold text-ink">
-              워크스페이스 비서
-              <span className="ml-1.5 text-[10px] font-normal text-muted">매출·입금·리드 등록</span>
-            </p>
-            {messages.length > 0 && (
-              <button
-                onClick={() => setMessages([])}
-                className="text-xs text-muted hover:text-ink"
-              >
-                초기화
-              </button>
-            )}
+    <aside className={styles.panel} aria-label="옵티파이 비서">
+      <header className={styles.header}>
+        <h2><span aria-hidden className={styles.spark}>✦</span> 옵티파이 비서</h2>
+        <button type="button" className={styles.expand} onClick={onToggleExpanded} aria-expanded={expanded} aria-controls="assistant-log">{expanded ? "대화 작게" : "대화 크게"}</button>
+      </header>
+      <div className={styles.context}>
+        <label htmlFor="assistant-target">업무 대상</label>
+        <select id="assistant-target" value={target} onChange={(event) => setTarget(event.target.value)}>
+          <option value="auto">현재 화면 · {clients.find((client) => client.id === screenClientId)?.name ?? (screenClientId ? "고객 확인 중" : "전체 업무")}</option>
+          <option value="all">전체 업무</option>
+          {clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
+        </select>
+      </div>
+      <div id="assistant-log" ref={log} className={styles.log} role="log" aria-label="비서와의 대화" aria-live="polite" aria-relevant="additions">
+        {messages.length === 0 && <div className={styles.welcome}>
+          <strong>보고 있는 업무를 바로 맡겨주세요.</strong>
+          <p>고객을 옮겨도 대화는 이어집니다. 업무·일정·정산을 조회하거나 등록할 수 있어요.</p>
+          <div className={styles.suggestions}>
+            <button type="button" disabled={targetMissing || busy} onClick={() => void send("오늘 확인할 업무를 알려줘")}>오늘 확인할 업무 알려줘</button>
+            <button type="button" onClick={() => setInput("이 고객 점검 업무를 동생에게 내일까지 맡겨줘")}>점검 업무를 동생에게 맡기기 →</button>
           </div>
-
-          <div className="flex-1 space-y-3 overflow-y-auto p-3">
-            {messages.length === 0 && (
-              <p className="whitespace-pre-wrap rounded-lg bg-subtle p-3 text-xs leading-relaxed text-muted">
-                {GREETING}
-              </p>
-            )}
-            {messages.map((m, i) => (
-              <div key={i} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
-                <div
-                  className={[
-                    "max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-sm leading-relaxed",
-                    m.role === "user" ? "bg-accent-deep text-white" : "bg-subtle text-ink",
-                  ].join(" ")}
-                >
-                  {m.content}
-                  {m.actions && m.actions.length > 0 && (
-                    <div className="mt-2 space-y-1 border-t border-border/60 pt-2">
-                      {m.actions.map((a, j) => (
-                        <p key={j} className="text-[11px] text-muted">
-                          {a.ok ? "✅" : "⚠️"} {a.summary}
-                        </p>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-            {busy && (
-              <div className="flex justify-start">
-                <div className="rounded-lg bg-subtle px-3 py-2 text-sm text-muted">
-                  처리 중<span className="animate-pulse">…</span>
-                </div>
-              </div>
-            )}
-            <div ref={bottomRef} />
-          </div>
-
-          <div className="flex items-end gap-2 border-t border-border p-2.5">
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                  e.preventDefault();
-                  send();
-                }
-              }}
-              rows={2}
-              placeholder="요청을 입력하세요… (Enter 전송)"
-              className="flex-1 resize-none rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent-deep"
-            />
-            <button
-              onClick={send}
-              disabled={busy || !input.trim()}
-              className="rounded-md bg-accent px-3 py-2 text-sm font-bold text-ink hover:opacity-90 disabled:opacity-50"
-            >
-              전송
-            </button>
-          </div>
-        </div>
-      )}
-    </>
+        </div>}
+        {messages.map((message, index) => <article key={index} className={`${styles.message} ${message.role === "user" ? styles.user : ""}`}>
+          <div className={styles.messageLabel}>{message.role === "user" ? "나" : "옵티파이 비서"}<span>{message.context}</span></div>
+          <p>{message.content}</p>
+          {!!message.actions?.length && <ul className={styles.actions}>{message.actions.map((action, actionIndex) => <li key={actionIndex}><span>{action.ok ? "조회" : "확인 필요"}</span> {action.summary}</li>)}</ul>}
+        </article>)}
+        {actionError && <div className={styles.actionError} role="alert"><p>{actionError}</p><button type="button" disabled={resolving} onClick={() => void loadActions()}>초안 목록 다시 불러오기</button></div>}
+        {pendingActions.filter((action) => action.status === "pending").map((action) => <ActionCard key={action.id} action={action} busy={resolving} onResolve={resolveAction} />)}
+        {pendingActions.some((action) => action.status !== "pending") && <details className={styles.actionHistory}><summary>최근 처리 기록</summary>{pendingActions.filter((action) => action.status !== "pending").slice(-10).reverse().map((action) => <ActionCard key={action.id} action={action} busy={resolving} onResolve={resolveAction} />)}</details>}
+        {resolving && <p className={styles.pending} role="status">확인한 내용을 처리하고 있어요…</p>}
+        {busy && <p className={styles.pending} role="status">요청을 처리하고 있어요…</p>}
+      </div>
+      <form className={styles.form} onSubmit={(event) => { event.preventDefault(); void send(); }}>
+        <label htmlFor="assistant-input">비서에게 바로 요청하기</label>
+        <textarea id="assistant-input" value={input} maxLength={4000} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => {
+          if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); }
+        }} rows={3} placeholder="예: 내일까지 점검할 업무를 등록해줘" />
+        <div className={styles.compose}><span>Enter 전송 · Shift+Enter 줄바꿈</span><button type="submit" disabled={busy || targetMissing || !input.trim()}>보내기</button></div>
+      </form>
+    </aside>
   );
 }

@@ -1,6 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { WAITING_OPTIONS, isWaiting, waitingSummary } from "@/lib/task-waiting";
+import { TaskHistory } from "./task-history";
+import { dateValue } from "@/lib/assistant/action-types";
 import { createClient } from "@/lib/supabase/client";
 import {
   TASK_PRIORITIES,
@@ -23,6 +26,9 @@ function todayYmd(): string {
 type ViewMode = "list" | "kanban" | "templates";
 
 interface TaskDraft {
+  waiting_on: string;
+  waiting_reason: string;
+  followup_date: string;
   title: string;
   client_id: string;
   assignee_id: string;
@@ -38,6 +44,7 @@ interface TaskDraft {
  */
 export function TasksView({
   me,
+  initialTaskId,
   initialTasks,
   profiles,
   clients,
@@ -45,6 +52,7 @@ export function TasksView({
   services,
 }: {
   me: { id: string; role: string };
+  initialTaskId?: string;
   initialTasks: Task[];
   profiles: { id: string; name: string }[];
   clients: { id: string; name: string }[];
@@ -53,13 +61,22 @@ export function TasksView({
 }) {
   const supabase = createClient();
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
+  const [previousTasks, setPreviousTasks] = useState(initialTasks);
+  if (previousTasks !== initialTasks) {
+    setPreviousTasks(initialTasks);
+    setTasks(initialTasks);
+  }
+  const [focusedTask, setFocusedTask] = useState(initialTaskId ?? null);
   const [view, setView] = useState<ViewMode>("list");
-  const [fAssignee, setFAssignee] = useState<string>(me.id);
-  const [fStatus, setFStatus] = useState<string>("open");
+  const [fAssignee, setFAssignee] = useState<string>(initialTaskId ? "all" : me.id);
+  const [fStatus, setFStatus] = useState<string>(initialTaskId ? "all" : "open");
+  const [fWaiting, setFWaiting] = useState("all");
+  const saveLock = useRef(false);
   const [fClient, setFClient] = useState<string>("all");
   const [msg, setMsg] = useState("");
 
   const emptyDraft: TaskDraft = {
+    waiting_on: "none", waiting_reason: "", followup_date: "",
     title: "",
     client_id: "",
     assignee_id: me.id,
@@ -69,6 +86,7 @@ export function TasksView({
     memo: "",
   };
   const [draft, setDraft] = useState<TaskDraft>(emptyDraft);
+  const [draftVersion, setDraftVersion] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -93,23 +111,33 @@ export function TasksView({
     () =>
       tasks.filter(
         (t) =>
+          (!focusedTask || t.id === focusedTask) &&
           (fAssignee === "all" || t.assignee_id === fAssignee) &&
           (fClient === "all" || t.client_id === fClient) &&
+          (fWaiting === "all" || (fWaiting === "waiting" ? isWaiting(t) : t.waiting_on === fWaiting && isWaiting(t))) &&
           (view === "kanban" ||
             fStatus === "all" ||
             (fStatus === "open" ? t.status !== "done" : t.status === fStatus)),
       ),
-    [tasks, fAssignee, fStatus, fClient, view],
+    [tasks, fAssignee, fStatus, fClient, fWaiting, view, focusedTask],
   );
 
   async function saveTask() {
+    if (saveLock.current) return;
+    if (draft.waiting_on !== "none" && tasks.find((task) => task.id === editingId)?.status === "done") { setMsg("완료된 업무에는 대기를 등록할 수 없습니다. 업무 상태를 먼저 변경해 주세요."); return; }
+    if (draft.waiting_on !== "none" && !draft.waiting_reason.trim()) { setMsg("대기 사유를 입력해 주세요."); return; }
+    try { dateValue(draft.followup_date, "재확인일"); } catch (error) { setMsg((error as Error).message); return; }
     if (!draft.title.trim()) {
       setMsg("제목을 입력하세요.");
       return;
     }
+    saveLock.current = true;
     setBusy(true);
     setMsg("");
     const row = {
+      waiting_on: draft.waiting_on,
+      waiting_reason: draft.waiting_on === "none" ? null : draft.waiting_reason.trim(),
+      followup_date: draft.waiting_on === "none" ? null : draft.followup_date || null,
       title: draft.title.trim(),
       client_id: draft.client_id || null,
       assignee_id: draft.assignee_id || null,
@@ -118,23 +146,16 @@ export function TasksView({
       priority: draft.priority,
       memo: draft.memo.trim() || null,
     };
-    const { error } = editingId
-      ? await supabase
-          .from("tasks")
-          .update({ ...row, updated_at: new Date().toISOString() })
-          .eq("id", editingId)
-      : await supabase
-          .from("tasks")
-          .insert({ ...row, status: "todo", created_by: me.id });
-    setBusy(false);
-    if (error) {
-      setMsg(`저장 실패: ${error.message}`);
-      return;
-    }
-    setDraft(emptyDraft);
-    setEditingId(null);
-    setFormOpen(false);
-    await refetch();
+    try {
+      const { data, error } = editingId
+        ? await supabase.from("tasks").update(row).eq("id", editingId).eq("updated_at", draftVersion).select("id")
+        : await supabase.from("tasks").insert({ ...row, status: "todo", created_by: me.id }).select("id");
+      if (error) throw new Error(`저장 실패: ${error.message}${error.message.includes("waiting_") || error.message.includes("followup_date") ? " · 대기 기록 데이터베이스 설정이 필요합니다." : ""}`);
+      if (!data?.length) throw new Error("업무가 변경되거나 삭제되었습니다. 최신 내용을 다시 열어 확인해 주세요.");
+      setDraft(emptyDraft); setEditingId(null); setDraftVersion(null); setFormOpen(false);
+      await refetch();
+    } catch (error) { setMsg(error instanceof Error ? error.message : "저장 결과를 확인하지 못했습니다. 새로고침 후 다시 확인해 주세요."); }
+    finally { saveLock.current = false; setBusy(false); }
   }
 
   async function changeStatus(id: string, status: string) {
@@ -147,7 +168,7 @@ export function TasksView({
     if (error) {
       setTasks(prev);
       setMsg(`상태 변경 실패: ${error.message}`);
-    }
+    } else { await refetch(); }
   }
 
   async function removeTask(id: string) {
@@ -168,7 +189,9 @@ export function TasksView({
 
   function startEdit(t: Task) {
     setEditingId(t.id);
+    setDraftVersion(t.updated_at);
     setDraft({
+      waiting_on: t.waiting_on ?? "none", waiting_reason: t.waiting_reason ?? "", followup_date: t.followup_date ?? "",
       title: t.title,
       client_id: t.client_id ?? "",
       assignee_id: t.assignee_id ?? "",
@@ -188,6 +211,7 @@ export function TasksView({
 
   return (
     <div className="mx-auto max-w-6xl space-y-4">
+      {focusedTask && <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-accent/30 bg-tint p-4 text-sm"><span>{tasks.some((task) => task.id === focusedTask) ? "선택한 업무를 표시하고 있습니다." : "선택한 업무를 찾을 수 없습니다."}</span><button type="button" onClick={() => setFocusedTask(null)} className="font-semibold text-accent-deep underline">전체 업무 보기</button></div>}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-ink">업무</h1>
@@ -233,6 +257,7 @@ export function TasksView({
         </div>
       </div>
 
+      {focusedTask && !formOpen && <TaskHistory key={`${focusedTask}-${tasks.find((task) => task.id === focusedTask)?.updated_at}`} taskId={focusedTask} profiles={profiles} />}
       {msg && <p className="text-sm text-red-600">{msg}</p>}
 
       {view === "templates" ? (
@@ -320,6 +345,13 @@ export function TasksView({
                   onChange={(e) => setDraft({ ...draft, memo: e.target.value })}
                 />
               </div>
+              <div className="mt-4 grid grid-cols-1 gap-3 rounded-lg border border-border bg-surface p-3 sm:grid-cols-2">
+                <label className="text-sm text-muted">대기 대상<select aria-label="대기 대상" className={`${input} mt-1 w-full`} value={draft.waiting_on} onChange={(e) => setDraft({ ...draft, waiting_on: e.target.value })}>{WAITING_OPTIONS.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>
+                <label className="text-sm text-muted">다시 확인할 날짜<input aria-label="다시 확인할 날짜" type="date" className={`${input} mt-1 w-full`} disabled={draft.waiting_on === "none"} value={draft.followup_date} onChange={(e) => setDraft({ ...draft, followup_date: e.target.value })} /></label>
+                {draft.waiting_on !== "none" && <label className="text-sm text-muted sm:col-span-2">대기 사유<textarea aria-label="대기 사유" className={`${input} mt-1 w-full`} maxLength={2000} rows={2} placeholder="예: 유지보수사에 수정 지시서 전달, 반영 일정 회신 대기" value={draft.waiting_reason} onChange={(e) => setDraft({ ...draft, waiting_reason: e.target.value })} /></label>}
+                <p className="text-xs text-muted sm:col-span-2">대기 해제는 업무 완료와 별개입니다. 업무를 완료하면 대기도 해제됩니다.</p>
+              </div>
+              {editingId && <TaskHistory key={`${editingId}-${tasks.find((task) => task.id === editingId)?.updated_at}`} taskId={editingId} profiles={profiles} />}
               <div className="mt-3 flex gap-2">
                 <button
                   onClick={saveTask}
@@ -384,6 +416,7 @@ export function TasksView({
                 </option>
               ))}
             </select>
+            <select aria-label="대기 필터" className={input} value={fWaiting} onChange={(e) => setFWaiting(e.target.value)}><option value="all">대기 여부 전체</option><option value="waiting">대기 중인 업무</option>{WAITING_OPTIONS.filter((item) => item.key !== "none").map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select>
             <span className="text-xs text-muted">{filtered.length}건</span>
           </div>
 
@@ -437,6 +470,7 @@ export function TasksView({
                               </span>
                             )}
                           </p>
+                          {isWaiting(t) && <p className="mt-1 text-sm text-amber-800">{waitingSummary(t)}</p>}
                           {t.memo && (
                             <p className="mt-0.5 text-xs text-muted">{t.memo}</p>
                           )}
@@ -522,6 +556,7 @@ export function TasksView({
                           className="cursor-grab rounded-md border border-border bg-surface p-2.5 shadow-sm hover:border-accent-deep/50"
                         >
                           <p className="text-sm font-medium text-ink">{t.title}</p>
+                          {isWaiting(t) && <p className="mt-1 text-sm text-amber-800">{waitingSummary(t)}</p>}
                           <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
                             {t.priority === "high" && (
                               <span className="rounded bg-red-50 px-1 py-0.5 font-medium text-red-600">

@@ -1,5 +1,5 @@
 /**
- * 사이드바 네비게이션 정의 (config 기반). 2026-09-06 개편안 1차: "질문 다섯 개".
+ * 상단 네비게이션 정의 (config 기반). 2026-09-06 개편안 1차: "질문 다섯 개".
  *
  * - 오늘: 지금 무엇을 처리해야 하나 (/)
  * - 고객사: 이 고객의 일이 어디까지 왔나 (/clients → /clients/[id]/[탭])
@@ -30,10 +30,10 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/sales", label: "영업", icon: "📞" },
   { href: "/diagnosis", label: "SEO 진단", parent: "/sales" },
   { href: "/quotes", label: "견적서 · 계약서", parent: "/sales" },
+  { href: "/schedule", label: "업무 · 일정", icon: "📅" },
+  { href: "/tasks", label: "업무 보드", parent: "/schedule" },
   { href: "/revenue", label: "정산", icon: "💳" },
   { href: "/ledger", label: "장부", parent: "/revenue" },
-  { href: "/schedule", label: "일정", icon: "📅" },
-  { href: "/tasks", label: "업무 보드", parent: "/schedule" },
   { href: "/settings", label: "설정 (팀 · 연동 · 사용량)", aux: true },
   { href: "/daily", label: "데일리 소식", aux: true },
 ];

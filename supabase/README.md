@@ -41,3 +41,15 @@ on conflict (id) do update set name = excluded.name, role = excluded.role;
 
 ## 5. 환경변수
 Settings → API에서 URL / anon key / service_role key를 복사해 `.env.local`에 입력.
+
+
+## 0033 — 비서 최종 확인·업무 대기 기록
+
+리뉴얼 코드 배포 전에 `migrations/0033_assistant_confirmation_waiting.sql`을 해당 프로젝트 SQL Editor에서 한 번 실행한다. 트랜잭션으로 적용하며 재실행할 수 있다. 기존 0002 파일을 다시 실행하지 않는다.
+
+- 비서의 등록·변경 요청은 본인만 읽는 초안으로 저장된다. 확인 또는 취소는 인증된 `resolve_assistant_action`을 통해 처리한다. 재확인은 같은 결과를 반환한다.
+- 업무 대기 대상·사유·재확인일과 변경 이력이 추가된다. 기존 업무의 과거 이력은 소급 생성하지 않는다.
+- 데이터베이스 설정 전에는 비서 변경 실행이 차단된다. 설정 오류를 즉시 실행 방식으로 우회하지 않는다.
+- 홈택스 발행, 고객 발송, 계약 체결은 자동 수행하지 않는다.
+
+검증: `npm test` 및 `npm run build`. 데이터베이스 검증은 `supabase/tests/assistant-confirmation.mjs`를 사용한다. 테스트용 `@electric-sql/pglite`를 별도 임시 폴더에 설치한 뒤 `PGLITE_MODULE`을 그 모듈의 `dist/index.js` 절대 경로로 지정하여 Node로 실행한다. 테스트는 메모리 데이터베이스와 예시 데이터만 사용하며 실제 Supabase에 연결하지 않는다. 동시 연결 부하 테스트는 포함하지 않는다.

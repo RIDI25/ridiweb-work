@@ -302,6 +302,10 @@ export interface InvoicePayment extends Timestamps {
 
 /** 팀 업무 — status/task_type/priority는 lib/tasks.ts 레지스트리 키 (text) */
 export interface Task extends Timestamps {
+  waiting_on?: string;
+  waiting_reason?: string | null;
+  waiting_since?: string | null;
+  followup_date?: string | null;
   id: string;
   title: string;
   client_id: string | null;

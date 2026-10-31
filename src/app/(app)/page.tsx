@@ -1,3 +1,5 @@
+import { loadWorkspaceProgress } from "@/lib/workspace-data";
+import { ReviewInbox, ClientProgressTable, WaitingBoard } from "@/components/today/progress-board";
 import { requireProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { channelLabel } from "@/lib/channels";
@@ -46,7 +48,7 @@ export default async function TodayPage() {
   const calEndDate = new Date(Date.UTC(ty, tm + 2, 0));
   const calEnd = calEndDate.toISOString().slice(0, 10);
 
-  const [clientsRes, profilesRes, reviewRes, tasksRes, leadsRes, plansRes, invoicesRes, paymentsRes, servicesRes, eventsRes, monthContentsRes, calPlansRes, calTasksRes, calInvoicesRes] =
+  const [clientsRes, profilesRes, reviewRes, tasksRes, leadsRes, plansRes, invoicesRes, paymentsRes, servicesRes, eventsRes, monthContentsRes, calPlansRes, calTasksRes, calInvoicesRes, progress] =
     await Promise.all([
       supabase.from("clients").select("id, name, is_internal, status").order("is_internal", { ascending: false }).order("created_at"),
       supabase.from("profiles").select("id, name"),
@@ -85,6 +87,7 @@ export default async function TodayPage() {
         .order("scheduled_date"),
       supabase.from("tasks").select("id, title, due_date, assignee_id, client_id").neq("status", "done").gte("due_date", calStart).lte("due_date", calEnd),
       supabase.from("tax_invoices").select("id, issue_date, counterparty").neq("status", "cancelled").gte("issue_date", calStart).lte("issue_date", calEnd),
+      loadWorkspaceProgress(supabase),
     ]);
 
   type ClientLite = { id: string; name: string; is_internal: boolean; status: string };
@@ -231,7 +234,17 @@ export default async function TodayPage() {
     });
 
   return (
-    <div className="mx-auto max-w-6xl space-y-5">
+    <div className="mx-auto max-w-7xl space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-3 pb-1">
+        <div><h1 className="text-2xl font-bold tracking-tight">오늘</h1><p className="mt-2 text-sm text-muted">확인할 일부터 보고, 고객별 다음 행동을 이어가세요.</p></div>
+        <time dateTime={today} className="pt-2 text-xs text-muted">{today.replaceAll("-", ". ")}</time>
+      </div>
+      {progress.warnings.length > 0 && <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{progress.warnings.map((warning) => <p key={warning}>{warning}</p>)}</div>}
+      <ReviewInbox reviews={progress.reviews} unavailable={progress.reviewUnavailable} />
+      <WaitingBoard items={progress.waitingItems} unavailable={progress.reviewUnavailable} />
+      <ClientProgressTable clients={progress.clients.filter((client) => client.clientStatus === "active")} />
+      <p className="text-xs text-muted">최근 기록은 등록·변경 시각입니다. 고객 전달·고객 확인 여부는 별도로 확인해 주세요.</p>
+      <h2 className="pt-2 text-lg font-semibold">일정과 나머지 할 일</h2>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
         <div className="lg:col-span-3">
           <HomeCalendar

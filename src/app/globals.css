@@ -12,9 +12,14 @@
   --color-ink: #111827; /* 잉크(본문 텍스트) */
 
   --color-surface: #ffffff;
-  --color-muted: #6b7280; /* 보조 텍스트 */
+  --color-muted: #536176; /* 보조 텍스트 */
   --color-border: #e5e7eb; /* 구분선 */
-  --color-subtle: #f4f6fa; /* 옅은 배경 */
+  --color-subtle: #f5f7fb; /* 옅은 배경 */
+
+  --text-xs: 0.8125rem;
+  --text-sm: 0.9375rem;
+  --text-xl: 1.5rem;
+  --text-2xl: 1.875rem;
 
   --font-sans:
     "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
@@ -30,5 +35,6 @@ body {
   background: var(--color-surface);
   color: var(--color-ink);
   font-family: var(--font-sans);
+  line-height: 1.65;
   -webkit-font-smoothing: antialiased;
 }

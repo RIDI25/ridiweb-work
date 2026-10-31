@@ -1,12 +1,14 @@
 /**
- * 워크스페이스 비서 챗봇 — 도구 정의·실행기.
- * 실행은 사용자 세션의 Supabase 클라이언트로 → RLS 권한이 그대로 적용된다
- * (예: 세금계산서·리드는 owner 전용 — member가 시도하면 권한 오류를 그대로 안내).
- * 도구 추가는 TOOLS 배열 + executeAssistantTool의 case 하나로 끝.
+ * 워크스페이스 비서 챗봇 — 도구 정의·읽기 전용 실행기. 쓰기는 확인 초안과 전용 RPC를 거친다.
+ * 조회는 사용자 세션으로 실행한다. 등록·변경은 prepareAction으로 초안을 저장하고,
+ * resolve_assistant_action RPC에서 본인 확인·권한·최신 상태를 검증한 뒤 실행한다.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type Anthropic from "@anthropic-ai/sdk";
+import { READ_TOOLS } from "./action-types";
+import { resolvePerson, resolveCustomer } from "./prepare-action";
+import { waitingSummary } from "@/lib/task-waiting";
 import {
   TASK_PRIORITIES,
   TASK_STATUSES,
@@ -18,12 +20,19 @@ import {
   ENTRY_TYPES,
   LEDGER_CATEGORIES,
   PAYMENT_METHODS,
-  entryTypeLabel,
-  ledgerCategoryLabel,
-  paymentMethodLabel,
 } from "@/lib/ledger";
 
 export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
+  {
+    name: "set_task_waiting",
+    description: "고객·제작사·내부 응답 대기 또는 대기 해제 초안을 만든다. list_tasks로 대상 업무를 먼저 확인한다. 업무 진행 상태는 바꾸지 않는다.",
+    input_schema: { type: "object", properties: {
+      task_id: { type: "string", description: "대상 업무 ID" },
+      waiting_on: { type: "string", enum: ["none", "client", "vendor", "internal"] },
+      waiting_reason: { type: "string", description: "누구에게 무엇을 요청하고 기다리는지. 대기 등록 시 필수" },
+      followup_date: { type: "string", description: "다시 확인할 날짜 YYYY-MM-DD" },
+    }, required: ["task_id", "waiting_on"] },
+  },
   {
     name: "add_tax_invoice",
     description:
@@ -59,12 +68,13 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
   {
     name: "add_invoice_payment",
     description:
-      "인보이스에 입금을 등록한다 — 선금/잔금 구분 없이 통장에 들어온 금액을 그대로 누적. 먼저 list_tax_invoices로 대상 인보이스 id를 찾은 뒤 호출한다. 입금 합계가 인보이스 합계에 도달하면 자동으로 입금완료 처리된다.",
+      "인보이스에 입금을 등록한다 — 통장에 들어온 금액과 착수금/잔금/전액 구분을 기록하는 확인 초안을 만든다. 먼저 list_tax_invoices로 대상 인보이스 id를 찾은 뒤 호출한다. 입금 합계가 인보이스 합계에 도달하면 자동으로 입금완료 처리된다.",
     input_schema: {
       type: "object",
       properties: {
         invoice_id: { type: "string", description: "대상 인보이스 id (list_tax_invoices에서 획득, 필수)" },
         amount: { type: "integer", description: "입금액 (통장 기준, 원, 필수)" },
+        kind: { type: "string", enum: ["deposit", "balance", "full", "other"], description: "착수금/잔금/전액/기타 (기본 other)" },
         paid_date: { type: "string", description: "입금일 YYYY-MM-DD (기본: 오늘)" },
         memo: { type: "string", description: "메모" },
       },
@@ -117,6 +127,7 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
     input_schema: {
       type: "object",
       properties: {
+        client_name: { type: "string", description: "조회할 고객명. 고객을 지정한 요청이면 전달" },
         assignee: { type: "string", description: "'me' | 'member' | 'all'(기본) | 팀원 이름" },
         status: { type: "string", description: "'open'(미완료, 기본) | 'all' | todo/in_progress/review/done" },
         limit: { type: "integer", description: "최대 건수 (기본 15)" },
@@ -209,41 +220,7 @@ function kstToday(): string {
 const wonFmt = (n: number) => `${Math.round(n).toLocaleString("ko-KR")}원`;
 
 const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"];
-const dowOf = (ymd: string) => DOW_KO[new Date(`${ymd}T00:00:00+09:00`).getUTCDay()] ?? "";
-
-/** '동생/직원'(member)·'나'(요청자)·팀원 이름 → 프로필 해석 */
-async function resolveAssignee(
-  supabase: SupabaseClient,
-  userId: string,
-  raw: unknown,
-): Promise<{ id: string | null; name: string } | { error: string }> {
-  const v = String(raw ?? "").trim();
-  if (!v) return { id: null, name: "미지정" };
-  if (v === "me") {
-    const { data } = await supabase.from("profiles").select("name").eq("id", userId).single();
-    return { id: userId, name: data?.name ?? "나" };
-  }
-  if (v === "member") {
-    const { data } = await supabase.from("profiles").select("id, name").eq("role", "member").limit(1);
-    if (!data?.length) return { error: "member 프로필이 아직 없습니다. 담당 없이 등록하려면 assignee를 비워주세요." };
-    return { id: data[0].id, name: data[0].name };
-  }
-  const { data } = await supabase.from("profiles").select("id, name").ilike("name", `%${v}%`).limit(1);
-  if (!data?.length) return { error: `'${v}' 이름의 팀원을 찾지 못했습니다.` };
-  return { id: data[0].id, name: data[0].name };
-}
-
-/** 클라이언트명 부분 일치 → id. 못 찾으면 연결 없이 진행 (note로 알림) */
-async function resolveClient(
-  supabase: SupabaseClient,
-  raw: unknown,
-): Promise<{ id: string | null; name: string | null; note: string }> {
-  const v = String(raw ?? "").trim();
-  if (!v) return { id: null, name: null, note: "" };
-  const { data } = await supabase.from("clients").select("id, name").ilike("name", `%${v}%`).limit(1);
-  if (!data?.length) return { id: null, name: null, note: ` (클라이언트 '${v}'를 못 찾아 연결 없이 등록)` };
-  return { id: data[0].id, name: data[0].name, note: "" };
-}
+const dowOf = (ymd: string) => DOW_KO[new Date(`${ymd}T00:00:00Z`).getUTCDay()] ?? "";
 
 /** 도구 실행 — 결과는 모델이 읽는 한국어 요약 문자열(JSON) */
 export async function executeAssistantTool(
@@ -253,31 +230,8 @@ export async function executeAssistantTool(
   ctx: { userId: string },
 ): Promise<{ ok: boolean; result: string }> {
   try {
+    if (!(READ_TOOLS as readonly string[]).includes(name)) return { ok: false, result: "변경은 확인 초안을 통해서만 실행할 수 있습니다." };
     switch (name) {
-      case "add_tax_invoice": {
-        const supply = Number(input.supply_amount) || 0;
-        if (!input.counterparty || supply <= 0) {
-          return { ok: false, result: "거래처명과 공급가액이 필요합니다." };
-        }
-        const vat = input.vat_amount != null ? Number(input.vat_amount) : Math.round(supply * 0.1);
-        const row = {
-          issue_date: (input.issue_date as string) || kstToday(),
-          counterparty: String(input.counterparty).trim(),
-          end_client_name: (input.end_client_name as string) || null,
-          description: (input.description as string) || null,
-          supply_amount: supply,
-          vat_amount: vat,
-          total_amount: supply + vat,
-          deal_channel: (input.deal_channel as string) || "direct",
-          memo: (input.memo as string) || null,
-        };
-        const { error } = await supabase.from("tax_invoices").insert(row);
-        if (error) return { ok: false, result: `등록 실패: ${error.message}` };
-        return {
-          ok: true,
-          result: `세금계산서 등록 완료 — ${row.issue_date} ${row.counterparty}${row.end_client_name ? `(건명: ${row.end_client_name})` : ""}, 공급가 ${wonFmt(supply)} + 부가세 ${wonFmt(vat)} = 합계 ${wonFmt(supply + vat)}. 매출 메뉴에서 확인 가능.`,
-        };
-      }
       case "list_tax_invoices": {
         let q = supabase
           .from("tax_invoices")
@@ -291,10 +245,11 @@ export async function executeAssistantTool(
         const invoices = data ?? [];
         if (!invoices.length) return { ok: true, result: "해당하는 세금계산서가 없습니다." };
         const ids = invoices.map((i) => i.id);
-        const { data: pays } = await supabase
+        const { data: pays, error: paysError } = await supabase
           .from("invoice_payments")
           .select("invoice_id, amount")
           .in("invoice_id", ids);
+        if (paysError) return { ok: false, result: "입금 기록 조회에 실패했습니다. 미수금을 확정할 수 없습니다." };
         const paid = new Map<string, number>();
         for (const p of pays ?? []) {
           paid.set(p.invoice_id, (paid.get(p.invoice_id) ?? 0) + Number(p.amount));
@@ -316,100 +271,20 @@ export async function executeAssistantTool(
             .join("\n") || "미수 건이 없습니다.",
         };
       }
-      case "add_invoice_payment": {
-        const amount = Number(input.amount) || 0;
-        const invoiceId = String(input.invoice_id || "");
-        if (!invoiceId || amount <= 0) return { ok: false, result: "invoice_id와 입금액이 필요합니다." };
-        const { data: inv, error: invErr } = await supabase
-          .from("tax_invoices")
-          .select("id, counterparty, total_amount, status")
-          .eq("id", invoiceId)
-          .single();
-        if (invErr || !inv) return { ok: false, result: "해당 인보이스를 찾을 수 없습니다." };
-        const paidDate = (input.paid_date as string) || kstToday();
-        const { error } = await supabase.from("invoice_payments").insert({
-          invoice_id: invoiceId,
-          paid_date: paidDate,
-          amount,
-          kind: "other", // 선금/잔금 구분 없이 누적 (스키마 호환용 고정값)
-          memo: (input.memo as string) || null,
-        });
-        if (error) return { ok: false, result: `입금 등록 실패: ${error.message}` };
-        const { data: pays } = await supabase
-          .from("invoice_payments")
-          .select("amount")
-          .eq("invoice_id", invoiceId);
-        const totalPaid = (pays ?? []).reduce((s, p) => s + Number(p.amount), 0);
-        const remaining = Math.max(0, Number(inv.total_amount) - totalPaid);
-        if (remaining === 0 && inv.status !== "paid") {
-          await supabase
-            .from("tax_invoices")
-            .update({ status: "paid", paid_at: paidDate, updated_at: new Date().toISOString() })
-            .eq("id", invoiceId);
-        }
-        return {
-          ok: true,
-          result: `입금 등록 완료 — ${inv.counterparty}에 ${wonFmt(amount)} (${paidDate}). 누적 입금 ${wonFmt(totalPaid)}, 남은 미수 ${wonFmt(remaining)}${remaining === 0 ? " → 완납 처리됨" : ""}.`,
-        };
-      }
-      case "add_lead": {
-        if (!input.company_name) return { ok: false, result: "업체명이 필요합니다." };
-        const row = {
-          company_name: String(input.company_name).trim(),
-          contact_name: (input.contact_name as string) || null,
-          phone: (input.phone as string) || null,
-          email: (input.email as string) || null,
-          industry: (input.industry as string) || null,
-          region: (input.region as string) || null,
-          source: (input.source as string) || null,
-          deal_channel: (input.deal_channel as string) || "direct",
-          partner_name: (input.partner_name as string) || null,
-          next_followup: (input.next_followup as string) || null,
-          memo: (input.memo as string) || null,
-        };
-        const { error } = await supabase.from("leads").insert(row);
-        if (error) return { ok: false, result: `리드 등록 실패: ${error.message}` };
-        return {
-          ok: true,
-          result: `리드 등록 완료 — ${row.company_name}${row.industry ? ` (${row.industry})` : ""}${row.next_followup ? `, 팔로업 ${row.next_followup}` : ""}. 영업·리드 메뉴에서 확인 가능.`,
-        };
-      }
-      case "create_task": {
-        if (!input.title) return { ok: false, result: "업무 제목이 필요합니다." };
-        const assignee = await resolveAssignee(supabase, ctx.userId, input.assignee ?? "me");
-        if ("error" in assignee) return { ok: false, result: assignee.error };
-        const client = await resolveClient(supabase, input.client_name);
-        const row = {
-          title: String(input.title).trim(),
-          client_id: client.id,
-          assignee_id: assignee.id,
-          due_date: (input.due_date as string) || null,
-          status: "todo",
-          task_type: (input.task_type as string) || "ops",
-          priority: (input.priority as string) || "normal",
-          memo: (input.memo as string) || null,
-          created_by: ctx.userId,
-        };
-        const { error } = await supabase.from("tasks").insert(row);
-        if (error) return { ok: false, result: `업무 등록 실패: ${error.message}` };
-        return {
-          ok: true,
-          result: `업무 등록 완료 — "${row.title}" (담당 ${assignee.name}${row.due_date ? `, 마감 ${row.due_date}` : ""}${client.name ? `, ${client.name}` : ""})${client.note}. 업무 메뉴에서 확인 가능.`,
-        };
-      }
       case "list_tasks": {
+        const customer = input.client_name ? await resolveCustomer(supabase, input.client_name) : null;
         const statusIn = String(input.status ?? "open");
         let q = supabase
           .from("tasks")
-          .select("id, title, status, due_date, assignee_id, client_id, priority")
+          .select("*")
           .order("due_date", { ascending: true, nullsFirst: false })
           .limit(Math.min(Number(input.limit) || 15, 30));
+        if (customer?.id) q = q.eq("client_id", customer.id);
         if (statusIn === "open") q = q.neq("status", "done");
         else if (statusIn !== "all") q = q.eq("status", statusIn);
         const assigneeIn = String(input.assignee ?? "all");
         if (assigneeIn !== "all") {
-          const a = await resolveAssignee(supabase, ctx.userId, assigneeIn);
-          if ("error" in a) return { ok: false, result: a.error };
+          const a = await resolvePerson(supabase, ctx.userId, assigneeIn);
           if (a.id) q = q.eq("assignee_id", a.id);
         }
         const { data, error } = await q;
@@ -424,33 +299,16 @@ export async function executeAssistantTool(
           result: data
             .map(
               (t) =>
-                `id=${t.id} | ${t.title} | 담당 ${t.assignee_id ? (pName.get(t.assignee_id) ?? "-") : "미지정"} | ${taskStatusLabel(t.status)}${t.due_date ? ` | 마감 ${t.due_date}(${dowOf(t.due_date)})` : ""}${t.client_id ? ` | ${cName.get(t.client_id) ?? ""}` : ""}${t.priority === "high" ? " | 우선순위 높음" : ""}`,
+                `id=${t.id} | ${t.title} | 담당 ${t.assignee_id ? (pName.get(t.assignee_id) ?? "-") : "미지정"} | ${taskStatusLabel(t.status)}${t.due_date ? ` | 마감 ${t.due_date}(${dowOf(t.due_date)})` : ""}${t.client_id ? ` | ${cName.get(t.client_id) ?? ""}` : ""}${t.priority === "high" ? " | 우선순위 높음" : ""}${waitingSummary(t) ? ` | ${waitingSummary(t)}` : ""}`,
             )
             .join("\n"),
         };
-      }
-      case "update_task_status": {
-        const taskId = String(input.task_id || "");
-        const status = String(input.status || "");
-        if (!taskId || !status) return { ok: false, result: "task_id와 status가 필요합니다." };
-        const { data: task, error: tErr } = await supabase
-          .from("tasks")
-          .select("id, title")
-          .eq("id", taskId)
-          .single();
-        if (tErr || !task) return { ok: false, result: "해당 업무를 찾을 수 없습니다." };
-        const { error } = await supabase
-          .from("tasks")
-          .update({ status, updated_at: new Date().toISOString() })
-          .eq("id", taskId);
-        if (error) return { ok: false, result: `상태 변경 실패: ${error.message}` };
-        return { ok: true, result: `상태 변경 완료 — "${task.title}" → ${taskStatusLabel(status)}.` };
       }
       case "list_schedule": {
         const from = (input.date_from as string) || kstToday();
         const to =
           (input.date_to as string) ||
-          new Date(new Date(`${from}T00:00:00+09:00`).getTime() + 7 * 86_400_000)
+          new Date(new Date(`${from}T00:00:00Z`).getTime() + 7 * 86_400_000)
             .toISOString()
             .slice(0, 10);
         const [evRes, taskRes, invRes, profs] = await Promise.all([
@@ -464,6 +322,7 @@ export async function executeAssistantTool(
           supabase.from("tax_invoices").select("counterparty, issue_date").gte("issue_date", from).lte("issue_date", to).neq("status", "cancelled"),
           supabase.from("profiles").select("id, name"),
         ]);
+        if ([evRes, taskRes, invRes, profs].some((r) => r.error)) return { ok: false, result: "일부 일정 정보를 조회하지 못했습니다." };
         const pName = new Map((profs.data ?? []).map((p) => [p.id, p.name]));
         const lines: { date: string; time: string; text: string }[] = [];
         for (const e of evRes.data ?? []) {
@@ -490,51 +349,6 @@ export async function executeAssistantTool(
           result: lines.map((l) => `${l.date}(${dowOf(l.date)}) ${l.text}`).join("\n"),
         };
       }
-      case "create_event": {
-        if (!input.title || !input.event_date) {
-          return { ok: false, result: "일정 제목과 날짜가 필요합니다." };
-        }
-        const assignee = await resolveAssignee(supabase, ctx.userId, input.assignee);
-        if ("error" in assignee) return { ok: false, result: assignee.error };
-        const client = await resolveClient(supabase, input.client_name);
-        const row = {
-          title: String(input.title).trim(),
-          event_date: String(input.event_date),
-          event_time: (input.event_time as string) || null,
-          event_type: (input.event_type as string) || "meeting",
-          client_id: client.id,
-          assignee_id: assignee.id,
-          memo: (input.memo as string) || null,
-          created_by: ctx.userId,
-        };
-        const { error } = await supabase.from("events").insert(row);
-        if (error) return { ok: false, result: `일정 등록 실패: ${error.message}` };
-        return {
-          ok: true,
-          result: `일정 등록 완료 — ${row.event_date}(${dowOf(row.event_date)})${row.event_time ? ` ${row.event_time}` : ""} "${row.title}" (${eventTypeLabel(row.event_type)})${client.note}. 스케줄 메뉴에서 확인 가능.`,
-        };
-      }
-      case "add_ledger_entry": {
-        const amount = Number(input.amount) || 0;
-        if (amount <= 0) return { ok: false, result: "금액이 필요합니다." };
-        const row = {
-          entry_date: (input.entry_date as string) || kstToday(),
-          entry_type: (input.entry_type as string) || "expense",
-          payment_method: (input.payment_method as string) || "card",
-          amount,
-          counterparty: (input.counterparty as string) || null,
-          description: (input.description as string) || null,
-          category: (input.category as string) || "etc",
-          memo: (input.memo as string) || null,
-          created_by: ctx.userId,
-        };
-        const { error } = await supabase.from("ledger_entries").insert(row);
-        if (error) return { ok: false, result: `장부 기입 실패: ${error.message}` };
-        return {
-          ok: true,
-          result: `장부 기입 완료 — ${row.entry_date} ${entryTypeLabel(row.entry_type)} ${wonFmt(amount)} (${paymentMethodLabel(row.payment_method)}${row.counterparty ? `, ${row.counterparty}` : ""}, ${ledgerCategoryLabel(row.category)}). 장부 메뉴에서 확인 가능.`,
-        };
-      }
       case "get_revenue_summary": {
         // 매출 조회는 팀 전체 허용 (0023 — 쓰기는 계속 owner 전용)
         const month = (input.month as string) || kstToday().slice(0, 7);
@@ -552,6 +366,7 @@ export async function executeAssistantTool(
           supabase.from("tax_invoices").select("total_amount").neq("status", "cancelled"),
           supabase.from("invoice_payments").select("amount"),
         ]);
+        if ([invRes, payRes, allInvRes, allPayRes].some((r) => r.error)) return { ok: false, result: "매출 정보를 조회하지 못했습니다." };
         const inv = invRes.data ?? [];
         const supply = inv.reduce((s, i) => s + Number(i.supply_amount), 0);
         const total = inv.reduce((s, i) => s + Number(i.total_amount), 0);

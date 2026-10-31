@@ -3,7 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { TasksView } from "@/components/tasks/tasks-view";
 import type { ClientService, Task, TaskTemplate } from "@/types/database";
 
-export default async function TasksPage() {
+export default async function TasksPage({ searchParams }: { searchParams: Promise<{ taskId?: string }> }) {
+  const { taskId } = await searchParams;
   const profile = await requireProfile();
   const supabase = await createClient();
 
@@ -26,6 +27,8 @@ export default async function TasksPage() {
 
   return (
     <TasksView
+      key={taskId ?? "all"}
+      initialTaskId={taskId}
       me={{ id: profile.id, role: profile.role }}
       initialTasks={(tasksRes.data ?? []) as Task[]}
       profiles={(profilesRes.data ?? []) as { id: string; name: string }[]}
