@@ -4,7 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 export const GENERATION_MODEL = "claude-fable-5";
 
 /** 업무 조회·확인 초안·기획 대화를 함께 맡는 비서 모델. */
-export const ASSISTANT_MODEL = "claude-fable-5-1";
+export { ASSISTANT_MODEL } from "./ai-models";
 
 /**
  * Fable 5는 안전 분류기가 요청을 거부(stop_reason: refusal)할 수 있어

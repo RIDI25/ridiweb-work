@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { ASSISTANT_MODEL, SPECIALIST_MODEL, SPECIALIST_ROLES } from "@/lib/ai-models";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { saveClient } from "@/lib/actions/settings";
 import type { Client, Profile, Role } from "@/types/database";
 
-export function SettingsView({ role }: { role: Role }) {
+export function SettingsView({ role, aiConnected }: { role: Role; aiConnected: { fable: boolean; astra: boolean } }) {
   const isOwner = role === "owner";
   /** null = 고객사 목록, 값 = 해당 고객사 상세 설정 */
   const [newName, setNewName] = useState("");
@@ -65,6 +66,15 @@ export function SettingsView({ role }: { role: Role }) {
           </p>
         )}
       </div>
+
+      <section className="rounded-xl border border-border bg-surface p-5" aria-label="비서 팀 기본 설정">
+        <h2 className="text-lg font-bold text-ink">비서 팀 기본 설정</h2>
+        <p className="mt-2 text-sm leading-6 text-muted">Fable이 방향을 잡고, Astra가 역할별 실무를 수행해요. 결과를 검토한 Fable이 답변하고, 업무 변경은 내가 최종 확인해요.</p>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div className="rounded-lg bg-subtle p-4"><strong>총괄 · Claude Fable 5.1</strong><p className="mt-2 text-sm text-muted">전체 기획 · 비서 대화 · 우선순위 · 최종 답변</p><p className="mt-2 text-xs text-muted">{ASSISTANT_MODEL} · {aiConnected.fable ? "연결 키 설정됨" : "연결 키 필요"}</p></div>
+          <div className="rounded-lg bg-subtle p-4"><strong>실무 · GPT-6 Astra</strong><p className="mt-2 text-sm text-muted">{Object.values(SPECIALIST_ROLES).map(role => role.label).join(" · ")}</p><p className="mt-2 text-xs text-muted">{SPECIALIST_MODEL} · {aiConnected.astra ? "연결 키 설정됨" : "연결 키 필요"}</p></div>
+        </div>
+      </section>
 
       {/* 고객사 목록 — 옵티파이(내부)가 최상단 */}
       <section className="space-y-2">

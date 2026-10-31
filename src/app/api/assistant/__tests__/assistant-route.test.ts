@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-const f = vi.hoisted(() => ({ model: vi.fn(), read: vi.fn(), prepare: vi.fn(), insert: vi.fn(), save: vi.fn(), usage: vi.fn(), begin: vi.fn(), finish: vi.fn(), history: vi.fn() }));
+const f = vi.hoisted(() => ({ model: vi.fn(), read: vi.fn(), prepare: vi.fn(), insert: vi.fn(), save: vi.fn(), usage: vi.fn(), begin: vi.fn(), finish: vi.fn(), history: vi.fn(), specialist: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     auth: { getUser: async () => ({ data: { user: { id: "me" } } }) }, rpc: f.begin,
@@ -11,6 +11,7 @@ vi.mock("@/lib/supabase/server", () => ({
 vi.mock("@/lib/anthropic", async (importOriginal) => ({ ...await importOriginal<typeof import("@/lib/anthropic")>(), createAnthropic: () => ({ messages: { create: f.model } }) }));
 vi.mock("@/lib/assistant/tools", () => ({ ASSISTANT_TOOLS: [], executeAssistantTool: f.read }));
 vi.mock("@/lib/assistant/prepare-action", () => ({ prepareAction: f.prepare }));
+vi.mock("@/lib/assistant/specialist", async (original) => ({ ...await original<typeof import("@/lib/assistant/specialist")>(), runSpecialist: f.specialist }));
 vi.mock("@/lib/usage", () => ({ logApiUsage: f.usage }));
 import { POST } from "../route";
 const request = (messages = [{ role: "user", content: "업무를 등록해줘" }]) => {
@@ -25,6 +26,7 @@ beforeEach(() => {
   f.prepare.mockResolvedValue({ payload: { title: "점검", assignee_id: "me" }, display: { title: "업무 등록", fields: [{ label: "제목", value: "점검" }] } });
   f.save.mockResolvedValue({ data: { id: "draft", status: "pending" }, error: null });
   f.usage.mockResolvedValue(undefined);
+  f.specialist.mockResolvedValue({ ok: true, result: "Astra 분석 결과", summary: "GPT Astra · 자료 분석 완료" });
 });
 describe("assistant write gate", () => {
   it("never calls a model when the user message could not be saved", async () => {
@@ -44,7 +46,7 @@ describe("assistant write gate", () => {
     const response = await POST(request([{ role: "assistant", content: "기획 초안. ".repeat(2000) }, { role: "user", content: "이어서 미팅용 제안서 구성을 다듬어줘" }]));
     const result = await response.json();
     expect(result.ok).toBe(true); expect(result.text).toContain("제안서는 목표");
-    expect(f.model).toHaveBeenCalledWith(expect.objectContaining({ model: "claude-fable-5-1", messages: expect.arrayContaining([expect.objectContaining({ content: "기획 초안. ".repeat(2000) })]) }));
+    expect(f.model).toHaveBeenCalledWith(expect.objectContaining({ model: "claude-fable-5-1", messages: expect.arrayContaining([expect.objectContaining({ content: "기획 초안. ".repeat(2000) })]) }), expect.objectContaining({ maxRetries: 0 }));
     expect(f.prepare).not.toHaveBeenCalled(); expect(f.insert).not.toHaveBeenCalled();
     expect(f.usage).toHaveBeenCalledWith(expect.objectContaining({ model: "claude-fable-5-1" }));
   });
@@ -87,5 +89,31 @@ describe("assistant write gate", () => {
     f.prepare.mockResolvedValueOnce({ payload: {}, display: { title: "업무 등록", fields: [] } }).mockRejectedValueOnce(new Error("담당자를 확인해 주세요"));
     const result = await (await POST(request())).json();
     expect(result.pendingActions).toHaveLength(1); expect(result.actions[0].summary).toContain("담당자를 확인");
+  });
+});
+
+const toolResponse = (count = 1) => ({ usage: { input_tokens: 1, output_tokens: 1 }, content: Array.from({ length: count }, (_, i) => ({ type: "tool_use", id: `delegate${i}`, name: "delegate_specialist", input: { role: "analysis", task: "비교해줘", context: "자료" } })) });
+describe("Fable delegates work to Astra", () => {
+  it("returns the specialist result to Fable, saves evidence and keeps writes behind approval", async () => {
+    f.model.mockResolvedValueOnce(toolResponse()).mockResolvedValueOnce({ usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: "text", text: "검토한 최종 답변" }] });
+    const data = await (await POST(request())).json();
+    expect(f.specialist).toHaveBeenCalledWith({ role: "analysis", task: "비교해줘", context: "자료" }, "me", expect.any(Number));
+    expect(data.text).toBe("검토한 최종 답변");
+    expect(data.actions).toContainEqual({ name: "delegate_specialist", ok: true, summary: "GPT Astra · 자료 분석 완료" });
+    expect(f.model.mock.calls[1][0].messages).toContainEqual({ role: "user", content: [{ type: "tool_result", tool_use_id: "delegate0", content: "Astra 분석 결과", is_error: false }] });
+    expect(f.insert).not.toHaveBeenCalled(); expect(f.prepare).not.toHaveBeenCalled(); expect(f.read).not.toHaveBeenCalled();
+  });
+  it("caps delegation across the entire turn and sends failures back to Fable", async () => {
+    f.specialist.mockResolvedValue({ ok: false, result: "Astra 연결 실패", summary: "Astra 연결 실패" });
+    f.model.mockResolvedValueOnce(toolResponse(3)).mockResolvedValueOnce({ usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: "text", text: "작업을 나눠 주세요" }] });
+    const data = await (await POST(request())).json();
+    expect(f.specialist).toHaveBeenCalledTimes(2); expect(data.actions.every((a: { ok: boolean }) => !a.ok)).toBe(true);
+    expect(f.model.mock.calls[1][0].messages.at(-1).content.every((r: { is_error: boolean }) => r.is_error)).toBe(true);
+    expect(f.insert).not.toHaveBeenCalled();
+  });
+  it("never lets delegated output bypass confirmation for an actual change", async () => {
+    f.model.mockResolvedValueOnce(toolResponse()).mockResolvedValueOnce({ usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: "tool_use", id: "write", name: "create_task", input: { title: "검토" } }] });
+    const data = await (await POST(request())).json();
+    expect(data.pendingActions).toHaveLength(1); expect(data.text).toContain("확인할 초안"); expect(f.read).not.toHaveBeenCalled();
   });
 });

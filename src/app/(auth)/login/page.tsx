@@ -12,7 +12,7 @@ export default async function LoginPage({
       <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-8 shadow-sm">
         <div className="mb-6 flex items-center gap-2">
           <span className="inline-block h-3 w-3 rounded-full bg-accent" aria-hidden />
-          <h1 className="text-lg font-bold text-ink">옵티파이 워크스페이스</h1>
+          <h1 className="text-lg font-bold text-ink">RIDIWEB</h1>
         </div>
 
         <form action={signIn} className="space-y-4">

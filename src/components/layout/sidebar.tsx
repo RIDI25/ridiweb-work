@@ -108,8 +108,8 @@ export function NavList(props: { role?: Role; onNavigate?: () => void }) {
 export function Sidebar({ role, footer }: { role: Role; footer: ReactNode }) {
   return (
     <aside aria-label="워크스페이스 메뉴" className="flex h-full min-h-0 flex-col border-r border-border bg-surface">
-      <Link href="/" aria-label="옵티파이 워크스페이스 홈" className="mx-6 mb-5 mt-7 block w-fit shrink-0 leading-none focus-visible:outline-2 focus-visible:outline-accent">
-        <span className="block text-[31px] font-bold tracking-[-1.5px]">optify</span>
+      <Link href="/" aria-label="RIDIWEB 홈" className="mx-6 mb-5 mt-7 block w-fit shrink-0 leading-none focus-visible:outline-2 focus-visible:outline-accent">
+        <span className="block text-[31px] font-bold tracking-[-1.5px]">RIDIWEB</span>
         <span className="mt-2 block text-[11px] tracking-[.18em] text-muted">workspace</span>
       </Link>
       <NavList role={role} />
