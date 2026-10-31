@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { DOW_KO, EVENT_TYPES, SOURCE_STYLES, buildMonthGrid, eventTypeLabel, ymdOf } from "@/lib/schedule";
+import { DOW_KO, EVENT_TYPES, SOURCE_STYLES, buildMonthGrid, eventTypeLabel } from "@/lib/schedule";
 import type { CalendarEvent } from "@/types/database";
 
 export interface CalTask {
@@ -53,6 +53,7 @@ const input = "rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm 
  * 일정 + 업무 마감 + 세금계산서 발행일 + 콘텐츠 발행 예정을 한 달력에 겹쳐 보인다. 수정·상세는 /schedule.
  */
 export function HomeCalendar({
+  today,
   me,
   initialEvents,
   tasks,
@@ -61,6 +62,7 @@ export function HomeCalendar({
   clients,
   profiles,
 }: {
+  today: string;
   me: { id: string };
   initialEvents: CalendarEvent[];
   tasks: CalTask[];
@@ -69,10 +71,9 @@ export function HomeCalendar({
   clients: { id: string; name: string }[];
   profiles: { id: string; name: string }[];
 }) {
-  const now = new Date();
-  const today = ymdOf(now);
+  const [todayYear, todayMonth] = today.split("-").map(Number);
   const [events, setEvents] = useState<CalendarEvent[]>(initialEvents);
-  const [cursor, setCursor] = useState<{ y: number; m: number }>({ y: now.getFullYear(), m: now.getMonth() });
+  const [cursor, setCursor] = useState<{ y: number; m: number }>({ y: todayYear, m: todayMonth - 1 });
   const [picked, setPicked] = useState<string>(today);
   const [title, setTitle] = useState("");
   const [time, setTime] = useState("");
@@ -195,10 +196,10 @@ export function HomeCalendar({
             <button onClick={() => moveMonth(1)} aria-label="다음 달" className="rounded-md px-2 py-0.5 text-sm text-muted hover:bg-subtle">
               ›
             </button>
-            {(cursor.y !== now.getFullYear() || cursor.m !== now.getMonth()) && (
+            {(cursor.y !== todayYear || cursor.m !== todayMonth - 1) && (
               <button
                 onClick={() => {
-                  setCursor({ y: now.getFullYear(), m: now.getMonth() });
+                  setCursor({ y: todayYear, m: todayMonth - 1 });
                   setPicked(today);
                 }}
                 className="ml-1 rounded-md border border-border px-2 py-0.5 text-xs text-muted hover:text-ink"

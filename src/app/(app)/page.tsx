@@ -248,6 +248,7 @@ export default async function TodayPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
         <div className="lg:col-span-3">
           <HomeCalendar
+            today={today}
             me={{ id: profile.id }}
             initialEvents={(eventsRes.data ?? []) as CalendarEvent[]}
             tasks={(calTasksRes.data ?? []) as CalTask[]}

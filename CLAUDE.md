@@ -91,6 +91,8 @@ DB: `supabase/migrations/0001~0033`. DDL은 SQL Editor에서 수동 실행 (0013
 리뉴얼(2026-11-01): 상단 메뉴·상시 비서·고객별 진행 현황과 확인 대기 홈을 구현. 비서 쓰기는 `assistant_action_requests` 초안 → 사용자의 확인 버튼 → `resolve_assistant_action` 순서로만 실행한다. 초안은 생성자만 열람하고, 확인 시 권한·대상 최신 상태·만료를 재검증한다. 대기 대상·사유·재확인일과 `task_activity` 이력을 함께 표시한다. 업무 완료는 고객 보고·전달·확인 완료를 의미하지 않는다.
 0033 적용 완료(2026-11-01): `riblksexnoijlgruviqi` / optify_workspace의 main DB에 SQL Editor로 적용. 사전 조회에서 관련 테이블·함수·트리거가 모두 없음을 확인해, 0033의 존재하지 않는 규칙 제거 구문 5개를 생략하고 함수는 신규 생성하여 동일한 최종 구조를 만들었다. 새 저장 항목 API 200 및 로그인 없는 승인 요청 차단 확인. 로컬 검증 42개 + 임시 PostgreSQL 검증 12개, 빌드·PC/모바일 화면 검증 통과. 운영 웹 배포는 `RIDI25/optify_workspace`의 `main` 브랜치에 연결된 Vercel `optify-workspace` 프로젝트를 사용한다. 운영 주소는 https://optify-workspace-sepia.vercel.app/ 이며, 최신 적용 커밋과 배포 성공 여부는 Vercel에서 확인한다.
 
+운영 확인(2026-11-01): 리뉴얼 첫 커밋 `17a02ac`의 Vercel Production Ready 및 기존 운영 도메인 연결, 실제 로그인 후 홈·고객 목록·비서 업무/일정 조회와 메뉴 이동 시 대화 유지 확인. 홈 달력은 서버에서 계산한 한국 날짜를 전달해 서버 UTC와 브라우저 KST의 월·일 불일치를 방지한다. 10월 말 UTC/11월 초 KST 경계의 렌더 결과 일치 검증 통과.
+
 ## 셋업 (Supabase)
 `supabase/migrations/0001 → 0002 → 0003` 순서로 SQL Editor 실행. 이후 대시보드에서 owner/member
 계정 생성 → 각 `auth.users`에 대응하는 `profiles` 행 삽입(role 지정). 키는 `.env.local`에 입력.
