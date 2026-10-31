@@ -15,7 +15,7 @@ async function api(url: string, init?: RequestInit) {
   const response = await fetch(url, { cache: "no-store", ...init }); const data = await response.json();
   if (!response.ok) throw new Error(data.error || "연결을 확인하고 다시 시도해 주세요."); return data;
 }
-export function AssistantWidget({ fullPage, onClose }: { fullPage: boolean; onClose: () => void }) {
+export function AssistantWidget({ fullPage, visible, onClose }: { fullPage: boolean; visible: boolean; onClose: () => void }) {
   const pathname = usePathname(); const router = useRouter(); const { clients } = useClientContext();
   const screenClientId = parseClientPath(pathname)?.clientId;
   const [target, setTarget] = useState("auto");
@@ -54,7 +54,7 @@ export function AssistantWidget({ fullPage, onClose }: { fullPage: boolean; onCl
   }, [loadList]);
   const initialize = useCallback(async () => {
     setLoading(true); setError("");
-    try { const list = await loadList(); const id = active.current || list[0]?.id; if (id) { active.current = id; await loadConversation(id); } }
+    try { const list = await loadList(); const id = active.current || [...list].sort((a,b) => b.updated_at.localeCompare(a.updated_at))[0]?.id; if (id) { active.current = id; await loadConversation(id); } }
     catch (e) { setError((e as Error).message); }
     finally { setLoading(false); }
   }, [loadList, loadConversation]);
@@ -62,8 +62,8 @@ export function AssistantWidget({ fullPage, onClose }: { fullPage: boolean; onCl
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void initialize(); }, [initialize]);
   useEffect(() => {
-    if (page === 0 && log.current) log.current.scrollTop = log.current.scrollHeight;
-  }, [messages, busy, pendingActions, page]);
+    if (visible && page === 0 && log.current) log.current.scrollTop = log.current.scrollHeight;
+  }, [messages, busy, pendingActions, page, visible, fullPage]);
   useEffect(() => {
     if (!serverRunning || !conversation) return;
     const timer = window.setInterval(() => { void loadConversation(conversation.id).catch(e => setError(e.message)); }, 3000);
@@ -127,7 +127,7 @@ export function AssistantWidget({ fullPage, onClose }: { fullPage: boolean; onCl
     } catch (e) { setError((e as Error).message); }
     finally { actionLock.current = false; setResolving(false); }
   }
-  return <section className={`${styles.panel} ${fullPage ? styles.fullPage : styles.popup}`} aria-label="옵티파이 비서">
+  return <section className={`${styles.panel} ${fullPage ? styles.fullPage : styles.popup}`} aria-label="옵티파이 비서" onKeyDown={event => { if (!fullPage && event.key === "Escape") onClose(); }}>
     <header className={styles.header}><div><h1><span aria-hidden className={styles.spark}>✦</span> 비서 채팅</h1>{fullPage && <p>업무와 기획을 이어가는 나만의 대화 공간</p>}</div><div className={styles.headerActions}>{!fullPage && <Link href="/assistant">크게 열기 ↗</Link>}{!fullPage && <button aria-label="비서 채팅 닫기" onClick={onClose}>✕</button>}</div></header>
     <div className={styles.chatLayout}>
       <aside className={`${styles.history} ${showHistory ? styles.historyOpen : ""}`} aria-label="저장된 대화">

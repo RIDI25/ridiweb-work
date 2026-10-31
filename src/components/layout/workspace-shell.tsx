@@ -18,7 +18,7 @@ export function WorkspaceShell({ header, children }: { header: ReactNode; childr
       <div className={styles.header}>{header}</div>
       <main id={fullPage ? undefined : "workspace-main"} ref={main} className={styles.main} hidden={fullPage}>{children}</main>
       <div id={fullPage ? "workspace-main" : undefined} role={fullPage ? "main" : undefined} className={fullPage ? styles.chatPage : styles.chatDock} hidden={!fullPage && !open}>
-        <AssistantWidget fullPage={fullPage} onClose={() => setOpen(false)} />
+        <AssistantWidget visible={fullPage || open} fullPage={fullPage} onClose={() => setOpen(false)} />
       </div>
       {!fullPage && <button className={styles.launcher} onClick={() => setOpen(value => !value)} aria-expanded={open} aria-label={open ? "비서 채팅 닫기" : "비서 채팅 열기"}><span aria-hidden>{open ? "×" : "✦"}</span><span>{open ? "닫기" : "비서"}</span></button>}
     </div>
