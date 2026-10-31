@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { CLIENT_TABS, CONTENT_VIEWS, NAV_ITEMS, clientPath, parseClientPath, type NavItem } from "@/lib/nav";
 import { useClientContext } from "@/components/providers/client-context";
@@ -27,9 +27,10 @@ function NavLink({
     <Link
       href={item.href}
       onClick={onNavigate}
+      aria-current={active ? "page" : undefined}
       className={[
-        "flex items-center gap-2 rounded-md transition-colors",
-        sub ? "ml-6 px-2.5 py-1 text-[13px]" : "px-2.5 py-1.5 text-sm font-semibold",
+        "flex items-center gap-2 rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-accent",
+        sub ? "ml-7 px-3 py-1.5 text-[14px]" : "px-3 py-2.5 text-[15px] font-semibold",
         active ? "bg-tint text-accent-deep" : sub ? "text-muted hover:bg-subtle hover:text-ink" : "text-ink hover:bg-subtle",
       ].join(" ")}
     >
@@ -55,7 +56,7 @@ function ContentViewList({ clientId, current, onNavigate }: { clientId: string; 
             href={clientPath(clientId, "content", `view=${v.key}`)}
             onClick={onNavigate}
             title={v.hint}
-            className={["flex items-center rounded-md px-2 py-0.5 text-[12px]", active ? "bg-surface font-semibold text-accent-deep shadow-sm" : "text-muted hover:bg-surface/80 hover:text-ink"].join(" ")}
+            className={["flex items-center rounded-md px-2 py-1 text-[13px]", active ? "bg-surface font-semibold text-accent-deep shadow-sm" : "text-muted hover:bg-surface/80 hover:text-ink"].join(" ")}
           >
             {v.label}
           </Link>
@@ -117,7 +118,7 @@ function ClientBlock({ clientId, tab, onNavigate }: { clientId: string; tab: str
               href={clientPath(clientId, t.key)}
               onClick={onNavigate}
               className={[
-                "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[13px]",
+                "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[14px]",
                 active ? "bg-surface font-semibold text-accent-deep shadow-sm ring-1 ring-accent/30" : "text-ink hover:bg-surface/80",
               ].join(" ")}
             >
@@ -143,7 +144,7 @@ function ClientBlock({ clientId, tab, onNavigate }: { clientId: string; tab: str
 function NavListInner({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const inClient = parseClientPath(pathname);
-  const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
+  const isActive = (href: string) => (href === "/" ? pathname === "/" : (pathname === href || pathname.startsWith(`${href}/`)));
   const primaries = NAV_ITEMS.filter((i) => !i.parent && !i.aux);
   const subsOf = (href: string) => NAV_ITEMS.filter((i) => i.parent === href);
   const auxes = NAV_ITEMS.filter((i) => i.aux);
@@ -152,7 +153,7 @@ function NavListInner({ onNavigate }: { onNavigate?: () => void }) {
     isActive(item.href) || subsOf(item.href).some((s) => isActive(s.href)) || (item.href === "/clients" && !!inClient);
 
   return (
-    <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-3">
+    <nav aria-label="주 메뉴" className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pb-4 pt-2 [scrollbar-width:thin]">
       {primaries.map((item) => (
         <div key={item.href}>
           <NavLink item={item} active={primaryActive(item)} onNavigate={onNavigate} />
@@ -165,14 +166,14 @@ function NavListInner({ onNavigate }: { onNavigate?: () => void }) {
         </div>
       ))}
       <div className="pt-4">
-        <p className="px-2.5 pb-1 text-[11px] font-semibold tracking-wide text-muted">보조</p>
+        <p className="px-3 pb-2 text-xs font-semibold tracking-wide text-muted">보조</p>
         {auxes.map((item) => (
           <Link
             key={item.href}
             href={item.href}
             onClick={onNavigate}
             className={[
-              "block rounded-md px-2.5 py-1 text-[13px]",
+              "block rounded-md px-3 py-2 text-[14px] focus-visible:outline-2 focus-visible:outline-accent",
               isActive(item.href) ? "bg-tint text-accent-deep" : "text-muted hover:bg-subtle hover:text-ink",
             ].join(" ")}
           >
@@ -193,17 +194,15 @@ export function NavList(props: { role?: Role; onNavigate?: () => void }) {
   );
 }
 
-export function Sidebar({ role }: { role: Role }) {
+export function Sidebar({ role, footer }: { role: Role; footer: ReactNode }) {
   return (
-    <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-surface md:flex">
-      <div className="flex h-16 items-center gap-2 px-5">
-        <span className="inline-block h-3 w-3 rounded-full bg-accent" aria-hidden />
-        <span className="text-base font-bold tracking-tight text-ink">옵티파이 워크스페이스</span>
-      </div>
-
+    <aside aria-label="워크스페이스 메뉴" className="flex h-full min-h-0 flex-col border-r border-border bg-surface">
+      <Link href="/" aria-label="옵티파이 워크스페이스 홈" className="mx-6 mb-5 mt-7 block w-fit shrink-0 leading-none focus-visible:outline-2 focus-visible:outline-accent">
+        <span className="block text-[31px] font-bold tracking-[-1.5px]">optify</span>
+        <span className="mt-2 block text-[11px] tracking-[.18em] text-muted">workspace</span>
+      </Link>
       <NavList role={role} />
-
-      <div className="border-t border-border px-5 py-3 text-xs text-muted">2인 팀 · 같은 권한</div>
+      <div className="shrink-0 border-t border-border px-3 py-3">{footer}</div>
     </aside>
   );
 }

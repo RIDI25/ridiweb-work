@@ -128,7 +128,7 @@ export function AssistantWidget({ fullPage, visible, onClose }: { fullPage: bool
     finally { actionLock.current = false; setResolving(false); }
   }
   return <section className={`${styles.panel} ${fullPage ? styles.fullPage : styles.popup}`} aria-label="옵티파이 비서" onKeyDown={event => { if (!fullPage && event.key === "Escape") onClose(); }}>
-    <header className={styles.header}><div><h1><span aria-hidden className={styles.spark}>✦</span> 비서 채팅</h1>{fullPage && <p>업무와 기획을 이어가는 나만의 대화 공간</p>}</div><div className={styles.headerActions}>{!fullPage && <Link href="/assistant">크게 열기 ↗</Link>}{!fullPage && <button aria-label="비서 채팅 닫기" onClick={onClose}>✕</button>}</div></header>
+    <header className={styles.header}><div><h1><span aria-hidden className={styles.spark}>✦</span> 비서 채팅</h1></div><div className={styles.headerActions}>{!fullPage && <Link href="/assistant">크게 열기 ↗</Link>}{!fullPage && <button aria-label="비서 채팅 닫기" onClick={onClose}>✕</button>}</div></header>
     <div className={styles.chatLayout}>
       <aside className={`${styles.history} ${showHistory ? styles.historyOpen : ""}`} aria-label="저장된 대화">
         <button className={styles.historyClose} aria-label="대화 목록 닫기" onClick={() => setShowHistory(false)}>목록 닫기 ×</button>
@@ -138,8 +138,10 @@ export function AssistantWidget({ fullPage, visible, onClose }: { fullPage: bool
         <div className={styles.archiveInfo}><strong>매주 월요일 오전 9시</strong><p>지난주 요약과 원문을 내 볼트에 보관해요. 저장이 확인된 대화만 목록에서 정리하고, 고정한 대화는 남겨둬요.</p><small>{!connected ? "이 계정의 옵시디언 연결이 필요해요." : archive?.error ? "보관을 완료하지 못했어요. 대화는 그대로 남아 있어요." : archive?.saved_at ? `최근 보관 ${new Date(archive.saved_at).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" })}` : "맥이 켜지고 연결되면 실행 · 한국 시간"}</small><Link href="/meetings">옵시디언 자료 확인 ↗</Link></div>
       </aside>
       <div className={styles.chatMain}>
+        <div className={styles.threadToolbar}>
         <div className={styles.threadBar}><button className={styles.historyToggle} onClick={() => setShowHistory(v => !v)} aria-expanded={showHistory}>대화 목록</button><strong>{conversation?.title || "새로운 대화를 시작해요"}</strong>{conversation && <button disabled={loading} aria-pressed={conversation.pinned} onClick={() => void pin()}>{conversation.pinned ? "📌 고정됨" : "대화 고정"}</button>}<button disabled={networkBusy} aria-label="대화 새로고침" onClick={() => void initialize()}>↻</button></div>
         <div className={styles.context}><label htmlFor="assistant-target">업무 대상</label><select id="assistant-target" value={target} onChange={e => setTarget(e.target.value)}><option value="auto">현재 화면 · {clients.find(c => c.id === screenClientId)?.name || (screenClientId ? "고객 확인 중" : "전체 업무")}</option><option value="all">전체 업무</option>{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+        </div>
         {error && <div role="alert" className={styles.actionError}>{error}<button disabled={networkBusy} onClick={() => void initialize()}>대화 다시 불러오기</button></div>}
         <div id="assistant-log" ref={log} className={styles.log} role="log" aria-label="비서와의 대화" aria-live="polite" aria-relevant="additions">
           {more && <button className={styles.older} disabled={busy} onClick={() => { if (conversation) void loadConversation(conversation.id, page + 1).catch(e => setError(e.message)); }}>이전 메시지 더 보기</button>}
@@ -149,7 +151,7 @@ export function AssistantWidget({ fullPage, visible, onClose }: { fullPage: bool
           {pendingActions.some(a => a.status !== "pending") && <details className={styles.actionHistory}><summary>이 대화의 처리 기록</summary>{pendingActions.filter(a => a.status !== "pending").slice(-10).reverse().map(a => <ActionCard key={a.id} action={a} busy={resolving} onResolve={resolveAction} />)}</details>}
           {(busy || resolving) && <p className={styles.pending} role="status">{loading ? "저장된 대화를 불러오고 있어요…" : resolving ? "확인한 내용을 처리하고 있어요…" : "요청을 저장하고 답변을 준비하고 있어요…"}</p>}
         </div>
-        <form className={styles.form} onSubmit={e => { e.preventDefault(); void send(); }}><label htmlFor="assistant-input">비서에게 바로 요청하기</label><textarea id="assistant-input" value={input} maxLength={8000} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); } }} rows={3} placeholder="업무를 부탁하거나, 기획을 함께 시작해 보세요." /><div className={styles.compose}><span>대화 자동 저장 · Enter 전송 · Shift+Enter 줄바꿈</span><button type="submit" disabled={busy || targetMissing || !input.trim() || !ready}>보내기</button></div></form>
+        <form className={styles.form} onSubmit={e => { e.preventDefault(); void send(); }}><label htmlFor="assistant-input">비서에게 바로 요청하기</label><div className={styles.inputRow}><textarea id="assistant-input" value={input} maxLength={8000} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); } }} rows={2} placeholder="업무를 부탁하거나, 기획을 함께 시작해 보세요." /><button type="submit" disabled={busy || targetMissing || !input.trim() || !ready}>보내기</button></div><p className={styles.compose}>대화 자동 저장 · Enter 전송 · Shift+Enter 줄바꿈</p></form>
       </div>
     </div>
   </section>;

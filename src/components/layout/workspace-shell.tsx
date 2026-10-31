@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { AssistantWidget } from "@/components/assistant/assistant-widget";
 import styles from "./workspace-shell.module.css";
 
-export function WorkspaceShell({ header, children }: { header: ReactNode; children: ReactNode }) {
+export function WorkspaceShell({ navigation, mobileHeader, children }: { navigation: ReactNode; mobileHeader: ReactNode; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const main = useRef<HTMLElement>(null);
   const pathname = usePathname();
@@ -15,7 +15,8 @@ export function WorkspaceShell({ header, children }: { header: ReactNode; childr
   return (
     <div className={styles.shell}>
       <a href="#workspace-main" className={styles.skip}>본문으로 이동</a>
-      <div className={styles.header}>{header}</div>
+      <div className={styles.navigation}>{navigation}</div>
+      <div className={styles.header}>{mobileHeader}</div>
       <main id={fullPage ? undefined : "workspace-main"} ref={main} className={styles.main} hidden={fullPage}>{children}</main>
       <div id={fullPage ? "workspace-main" : undefined} role={fullPage ? "main" : undefined} className={fullPage ? styles.chatPage : styles.chatDock} hidden={!fullPage && !open}>
         <AssistantWidget visible={fullPage || open} fullPage={fullPage} onClose={() => setOpen(false)} />
