@@ -88,7 +88,7 @@ function NavListInner({ onNavigate }: { onNavigate?: () => void }) {
       const open = hasChildren && openSection === item.href;
       const submenuId = `${navId}-${item.href.slice(1)}`;
       return <Fragment key={item.href}><div className={styles.group}>
-        <div className={styles.menuRow} data-active={activeSection === item.href}>
+        <div className={styles.menuRow} data-tone={item.href === "/assistant" || item.href === "/schedule" ? "neutral" : undefined} data-active={activeSection === item.href}>
           <Link href={item.href} className={styles.mainLink} aria-current={pathname === item.href ? "page" : undefined} onClick={() => { setExpanded({ pathname, section: item.href }); onNavigate?.(); }}>
             {item.icon && <NavIcon name={item.icon} />}<span>{item.label}</span>
           </Link>

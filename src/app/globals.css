@@ -21,6 +21,9 @@
 }
 :root {
   color-scheme: light;
+  --neutral-accent: #404040; --neutral-deep: #262626; --neutral-on-accent: #ffffff;
+  --neutral-tint: #ededed; --neutral-surface: #ffffff; --neutral-subtle: #f7f7f7;
+  --neutral-ink: #242424; --neutral-muted: #6b6b6b; --neutral-border: #e9e9e9;
   --optify-accent: #257956; --optify-deep: #176343; --optify-tint: #eaf4ee;
   --moai-accent: #7355b1; --moai-deep: #63429f; --moai-tint: #f0ebf9;
   --lectures-accent: #bd5718; --lectures-deep: #9f4310; --lectures-tint: #fff0e5;
@@ -28,6 +31,9 @@
 }
 html[data-theme="dark"] {
   color-scheme: dark;
+  --neutral-accent: #d4d4d4; --neutral-deep: #f0f0f0; --neutral-on-accent: #171717;
+  --neutral-tint: #303030; --neutral-surface: #202020; --neutral-subtle: #171717;
+  --neutral-ink: #ededed; --neutral-muted: #aaaaaa; --neutral-border: #363636;
   --color-ink: #e8eaef;
   --color-surface: #202328;
   --color-muted: #a4abb4;
@@ -49,6 +55,13 @@ html[data-theme="dark"] {
 html[data-workspace="optify"], [data-workspace="optify"] { --color-accent:var(--optify-accent); --color-accent-deep:var(--optify-deep); --color-tint:var(--optify-tint); }
 html[data-workspace="moai"], [data-workspace="moai"] { --color-accent:var(--moai-accent); --color-accent-deep:var(--moai-deep); --color-tint:var(--moai-tint); }
 html[data-workspace="lectures"], [data-workspace="lectures"] { --color-accent:var(--lectures-accent); --color-accent-deep:var(--lectures-deep); --color-tint:var(--lectures-tint); }
+/* Shared assistant and calendar surfaces stay neutral in every workspace. */
+[data-tone="neutral"] {
+  --color-accent: var(--neutral-accent); --color-accent-deep: var(--neutral-deep); --color-on-accent: var(--neutral-on-accent);
+  --color-tint: var(--neutral-tint); --color-surface: var(--neutral-surface); --color-subtle: var(--neutral-subtle);
+  --color-ink: var(--neutral-ink); --color-muted: var(--neutral-muted); --color-border: var(--neutral-border);
+  color: var(--color-ink);
+}
 body { background:var(--color-surface); color:var(--color-ink); font-family:var(--font-sans); font-size:15px; line-height:1.65; -webkit-font-smoothing:antialiased; }
 button, input, select, textarea { accent-color:var(--color-accent); }
 ::selection { background:var(--color-tint); color:var(--color-accent-deep); }

@@ -2,6 +2,7 @@
 .navigation { grid-column:1; grid-row:1; min-height:0; min-width:0; z-index:20; }
 .header { display:none; }
 .main { grid-column:2; grid-row:1; min-width:0; min-height:0; overflow:auto; padding:28px; container-type:inline-size; scrollbar-width:thin; scroll-padding-top:24px; }
+.main[data-tone="neutral"] { background:var(--color-subtle); }
 .skip { position:absolute; left:16px; top:-80px; z-index:100; padding:12px 20px; background:var(--color-surface); color:var(--color-accent-deep); border:2px solid currentColor; border-radius:8px; }
 .skip:focus { top:12px; }
 .chatPage { grid-column:2; grid-row:1; min-width:0; min-height:0; overflow:hidden; }
