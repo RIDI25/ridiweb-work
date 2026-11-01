@@ -6,7 +6,7 @@
 .headerActions { display:flex; gap:16px; align-items:center; font-size:14px; color:var(--color-muted); }
 .modelTeam { font-size:12px; color:var(--color-muted); }
 @media (max-width:640px) { .modelTeam { display:none; } }
-.headerActions button { font-size:18px; padding:6px; }
+.headerActions > button { font-size:18px; padding:6px; }
 .chatLayout { position:relative; flex:1; display:flex; min-height:0; }
 .chatMain { min-width:0; flex:1; display:flex; flex-direction:column; min-height:0; }
 .history { width:220px; flex-shrink:0; display:flex; flex-direction:column; background:var(--color-subtle); border-right:1px solid var(--color-border); padding:16px 12px; overflow:auto; }
@@ -87,11 +87,11 @@
   .threadBar { padding:8px 12px; gap:6px; }
   .threadBar strong { font-size:13px; }
   .context { flex-basis:auto; padding:0 12px 8px; }
-  .context select { font-size:15px; }
+  .context select { font-size:16px; }
   .log { padding:20px 16px; }
   .welcome { margin:12px 0; }
   .welcome strong { font-size:23px; }
-  .form { padding:10px 12px; }
+  .form { padding:10px 12px calc(10px + env(safe-area-inset-bottom)); }
   .inputRow { gap:8px; }
   .inputRow textarea { height:60px; max-height:120px; resize:none; font-size:16px; }
   .inputRow button { padding:10px 12px; }
@@ -116,3 +116,9 @@
 .actionHistory summary { cursor: pointer; color: var(--color-muted); font-size: 14px; padding: 12px 0; }
 
 .archiveInfo summary {cursor:pointer;color:var(--color-muted);font-weight:600;}
+
+.mobileHint { display:none; }
+@media (max-width:767px), (pointer:coarse) { .desktopHint { display:none; } .mobileHint { display:inline; } }
+
+.popup .headerActions { gap:8px; }
+.popup .headerActions .modelTeam,.popup .headerActions > button span { display:none; }

@@ -28,7 +28,7 @@ export default async function LoginPage({
               type="email"
               required
               autoComplete="email"
-              className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent-deep"
+              className="w-full rounded-md border border-border bg-surface px-3 py-2 text-base outline-none focus:border-accent-deep"
             />
           </div>
 
@@ -42,7 +42,7 @@ export default async function LoginPage({
               type="password"
               required
               autoComplete="current-password"
-              className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent-deep"
+              className="w-full rounded-md border border-border bg-surface px-3 py-2 text-base outline-none focus:border-accent-deep"
             />
           </div>
 
@@ -61,8 +61,7 @@ export default async function LoginPage({
         </form>
 
         <p className="mt-6 text-xs leading-relaxed text-muted">
-          계정은 관리자가 Supabase 대시보드에서 직접 생성합니다. 공개 가입은
-          제공되지 않습니다.
+          초대받은 계정으로 로그인해 주세요.
         </p>
       </div>
     </main>

@@ -5,6 +5,7 @@ import { useRestrictedWorkspace } from "@/components/providers/workspace-context
 import { usePathname, useRouter } from "next/navigation";
 import { parseClientPath } from "@/lib/nav";
 import { useClientContext } from "@/components/providers/client-context";
+import { MobileAccess } from "./mobile-access";
 import { ActionCard } from "./action-card";
 import type { PendingAction } from "@/lib/assistant/action-types";
 import styles from "./assistant-widget.module.css";
@@ -81,6 +82,14 @@ export function AssistantWidget({ fullPage, visible, onClose }: { fullPage: bool
     }).catch(e => setError(e.message)); }, 60000);
     return () => window.clearInterval(timer);
   }, [visible, busy, resolving, page, loadList, loadConversation]);
+  useEffect(() => {
+    if (!visible) return;
+    const resume = () => {
+      if (document.visibilityState === "visible" && !sending.current && !actionLock.current) void initialize();
+    };
+    document.addEventListener("visibilitychange", resume);
+    return () => document.removeEventListener("visibilitychange", resume);
+  }, [initialize, visible]);
   async function choose(id: string) {
     if (busy || sending.current) return;
     if (input.trim() && !window.confirm("입력 중인 메시지를 비우고 다른 대화를 열까요?")) return;
@@ -133,7 +142,7 @@ export function AssistantWidget({ fullPage, visible, onClose }: { fullPage: bool
     finally { actionLock.current = false; setResolving(false); }
   }
   return <section className={`${styles.panel} ${fullPage ? styles.fullPage : styles.popup}`} aria-label="RIDIWEB 비서" onKeyDown={event => { if (!fullPage && event.key === "Escape") onClose(); }}>
-    <header className={styles.header}><div><h1><span aria-hidden className={styles.spark}>✦</span> 비서 채팅</h1></div><div className={styles.headerActions}><span className={styles.modelTeam} title="Claude Fable 5.1 총괄 · GPT-6 Astra 실무">Fable · Astra</span>{!fullPage && <Link href="/assistant">크게 열기 ↗</Link>}{!fullPage && <button aria-label="비서 채팅 닫기" onClick={onClose}>✕</button>}</div></header>
+    <header className={styles.header}><div><h1><span aria-hidden className={styles.spark}>✦</span> 비서 채팅</h1></div><div className={styles.headerActions}><MobileAccess /><span className={styles.modelTeam} title="Claude Fable 5.1 총괄 · GPT-6 Astra 실무">Fable · Astra</span>{!fullPage && <Link href="/assistant">크게 열기 ↗</Link>}{!fullPage && <button aria-label="비서 채팅 닫기" onClick={onClose}>✕</button>}</div></header>
     <div className={styles.chatLayout}>
       <aside className={`${styles.history} ${showHistory ? styles.historyOpen : ""}`} aria-label="저장된 대화">
         <button className={styles.historyClose} aria-label="대화 목록 닫기" onClick={() => setShowHistory(false)}>목록 닫기 ×</button>
@@ -156,7 +165,7 @@ export function AssistantWidget({ fullPage, visible, onClose }: { fullPage: bool
           {pendingActions.some(a => a.status !== "pending") && <details className={styles.actionHistory}><summary>이 대화의 처리 기록</summary>{pendingActions.filter(a => a.status !== "pending").slice(-10).reverse().map(a => <ActionCard key={a.id} action={a} busy={resolving} onResolve={resolveAction} />)}</details>}
           {(busy || resolving) && <p className={styles.pending} role="status">{loading ? "저장된 대화를 불러오고 있어요…" : resolving ? "확인한 내용을 처리하고 있어요…" : "요청을 저장하고 답변을 준비하고 있어요…"}</p>}
         </div>
-        <form className={styles.form} onSubmit={e => { e.preventDefault(); void send(); }}><label htmlFor="assistant-input">비서에게 바로 요청하기</label><div className={styles.inputRow}><textarea id="assistant-input" value={input} maxLength={8000} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); } }} rows={2} placeholder="비서에게 요청하기" /><button type="submit" disabled={busy || targetMissing || !input.trim() || !ready}>보내기</button></div><p className={styles.compose}>자동 저장 · Enter 전송 · Shift+Enter 줄바꿈</p></form>
+        <form className={styles.form} onSubmit={e => { e.preventDefault(); void send(); }}><label htmlFor="assistant-input">비서에게 바로 요청하기</label><div className={styles.inputRow}><textarea id="assistant-input" value={input} maxLength={8000} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && window.matchMedia("(min-width: 768px) and (hover: hover) and (pointer: fine)").matches) { e.preventDefault(); void send(); } }} rows={2} placeholder="비서에게 요청하기" /><button type="submit" disabled={busy || targetMissing || !input.trim() || !ready}>보내기</button></div><p className={styles.compose}>자동 저장<span className={styles.desktopHint}> · Enter 전송 · Shift+Enter 줄바꿈</span><span className={styles.mobileHint}> · 보내기 버튼으로 전송</span></p></form>
       </div>
     </div>
   </section>;

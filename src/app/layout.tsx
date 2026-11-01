@@ -1,10 +1,18 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 
 export const metadata: Metadata = {
   title: "RIDIWEB",
-  description: "옵티파이 콘텐츠 제작·키워드 리서치·리포트 통합 관리",
+  description: "옵티파이 · 모아이 · 강의 통합 워크스페이스와 개인 비서",
+  applicationName: "RIDIWEB",
+  appleWebApp: { capable: true, title: "RIDIWEB", statusBarStyle: "default" },
+  icons: { apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180" }] },
+};
+
+export const viewport: Viewport = {
+  width: "device-width", initialScale: 1, viewportFit: "cover", interactiveWidget: "resizes-content",
+  themeColor: [{ media: "(prefers-color-scheme: light)", color: "#ffffff" }, { media: "(prefers-color-scheme: dark)", color: "#161b22" }],
 };
 
 export default function RootLayout({

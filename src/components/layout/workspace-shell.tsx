@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
+import { MobileViewport } from "./mobile-viewport";
 import { AssistantWidget } from "@/components/assistant/assistant-widget";
 import { useWorkspace } from "@/components/providers/workspace-context";
 import styles from "./workspace-shell.module.css";
@@ -16,6 +17,7 @@ export function WorkspaceShell({ navigation, mobileHeader, children }: { navigat
   const fullPage = pathname === "/assistant";
   return (
     <div className={styles.shell} data-workspace={workspace}>
+      <MobileViewport />
       <a href="#workspace-main" className={styles.skip}>본문으로 이동</a>
       <div className={styles.navigation}>{navigation}</div>
       <div className={styles.header}>{mobileHeader}</div>
