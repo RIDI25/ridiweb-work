@@ -1,3 +1,4 @@
+import { moaiCalendar } from "@/lib/moai/types";
 import { lectureCalendar } from "@/lib/lectures/types";
 import { loadWorkspaceProgress } from "@/lib/workspace-data";
 import { ReviewInbox, ClientProgressTable, WaitingBoard } from "@/components/today/progress-board";
@@ -49,7 +50,7 @@ export default async function TodayPage() {
   const calEndDate = new Date(Date.UTC(ty, tm + 2, 0));
   const calEnd = calEndDate.toISOString().slice(0, 10);
 
-  const [clientsRes, profilesRes, reviewRes, tasksRes, leadsRes, plansRes, invoicesRes, paymentsRes, servicesRes, eventsRes, monthContentsRes, calPlansRes, calTasksRes, calInvoicesRes, progress, lecturesRes] =
+  const [clientsRes, profilesRes, reviewRes, tasksRes, leadsRes, plansRes, invoicesRes, paymentsRes, servicesRes, eventsRes, monthContentsRes, calPlansRes, calTasksRes, calInvoicesRes, progress, lecturesRes,moaiRes] =
     await Promise.all([
       supabase.from("clients").select("id, name, is_internal, status").order("is_internal", { ascending: false }).order("created_at"),
       supabase.from("profiles").select("id, name"),
@@ -90,6 +91,7 @@ export default async function TodayPage() {
       supabase.from("tax_invoices").select("id, issue_date, counterparty").neq("status", "cancelled").gte("issue_date", calStart).lte("issue_date", calEnd),
       loadWorkspaceProgress(supabase),
       supabase.from("lecture_projects").select("id,title,sessions,archived,stage,next_action,next_action_date").eq("archived",false),
+      supabase.from("moai_gatherings").select("id,title,sessions,state,archived").eq("archived",false),
     ]);
 
   type ClientLite = { id: string; name: string; is_internal: boolean; status: string };
@@ -249,8 +251,10 @@ export default async function TodayPage() {
       <h2 className="pt-2 text-lg font-semibold">일정과 나머지 할 일</h2>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
         <div className="lg:col-span-3">
+          {moaiRes.error && <p role="alert" className="text-sm text-muted">모아이 일정을 불러오지 못했어요.</p>}
           {lecturesRes.error && <p role="alert" className="text-sm text-muted">강의 일정을 불러오지 못했어요. 새로고침 후 확인해 주세요.</p>}
       <HomeCalendar
+        moai={moaiCalendar(moaiRes.data||[])}
         lectures={lectureCalendar(lecturesRes.data || [])}
             today={today}
             me={{ id: profile.id }}

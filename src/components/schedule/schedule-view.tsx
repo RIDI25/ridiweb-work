@@ -33,7 +33,7 @@ function weekOf(anchor: Date): string[] {
 
 interface CalItem {
   key: string;
-  kind: "event" | "task" | "invoice" | "lecture";
+  kind: "event" | "task" | "invoice" | "lecture" | "moai" | "shared";
   href?: string;
   date: string;
   time: string | null;
@@ -64,8 +64,11 @@ export function ScheduleView({
   invoices,
   clients,
   profiles,
-  lectures, lecturesError,
+  lectures, lecturesError, moai=[], shared=[], readOnly=false, moaiError=false,
 }: {
+  moai?: ReturnType<typeof lectureCalendar>;
+  shared?: Omit<ReturnType<typeof lectureCalendar>[number],"href">[];
+  readOnly?:boolean;moaiError?:boolean;
   lectures: ReturnType<typeof lectureCalendar>;
   lecturesError: boolean;
   me: { id: string };
@@ -155,12 +158,14 @@ export function ScheduleView({
       });
     }
     for (const l of lectures) push({...l, kind: "lecture"});
+    for (const l of moai) push({...l,kind:"moai"});
+    for (const l of shared) push({...l,kind:"shared"});
     for (const list of map.values()) {
       list.sort((a, b) => (a.time ?? "99") < (b.time ?? "99") ? -1 : 1);
     }
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [events, tasks, invoices, lectures]);
+  }, [events, tasks, invoices, lectures,moai,shared]);
 
   async function refetch() {
     const { data } = await supabase.from("events").select("*").order("event_date");
@@ -223,12 +228,14 @@ export function ScheduleView({
   }
 
   function openCreate(date?: string) {
+    if(readOnly)return;
     setEditingId(null);
     setDraft({ ...emptyDraft, event_date: date ?? today });
     setFormOpen(true);
   }
 
   function openEdit(e: CalendarEvent) {
+    if(readOnly)return;
     setEditingId(e.id);
     setDraft({
       title: e.title,
@@ -258,12 +265,13 @@ export function ScheduleView({
 
   return (
     <div className="mx-auto max-w-6xl space-y-4">
+      {moaiError && <p role="alert">모아이·공유 일정을 불러오지 못했어요. 새로고침 후 확인해 주세요.</p>}
       {lecturesError && <p role="alert">강의 일정을 불러오지 못했어요. 새로고침 후 확인해 주세요.</p>}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-ink">캘린더</h1>
           <p className="mt-1 text-sm text-muted">
-            강의·일정·업무 마감·세금계산서 발행일을 함께 봅니다.
+            {readOnly?"모아이와 공유받은 옵티파이 일정을 확인합니다. 공유 일정은 읽기 전용입니다.":"모아이·강의·일정·업무 마감·세금계산서 발행일을 함께 봅니다."}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -288,19 +296,19 @@ export function ScheduleView({
               </button>
             ))}
           </div>
-          <button
+          {!readOnly && <button
             onClick={() => openCreate()}
             className="rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-ink hover:opacity-90"
           >
             + 새 일정
-          </button>
+          </button>}
         </div>
       </div>
 
       {msg && <p className="text-sm text-red-600">{msg}</p>}
 
       {/* 일정 등록/수정 폼 */}
-      {formOpen && (
+      {formOpen && !readOnly && (
         <section className="rounded-lg border border-accent-deep/30 bg-tint/30 p-4">
           <h2 className="mb-3 text-sm font-semibold text-ink">
             {editingId ? "일정 수정" : "새 일정"}
@@ -538,7 +546,7 @@ export function ScheduleView({
                             {it.time}
                           </span>
                         )}
-                        {it.kind === "event" && it.event ? (
+                        {it.kind === "shared" ? <span>{it.label}</span> : it.kind === "event" && it.event ? (
                           <button
                             onClick={() => openEdit(it.event!)}
                             className="truncate text-left text-ink hover:text-accent-deep hover:underline"

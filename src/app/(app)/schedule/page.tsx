@@ -1,3 +1,5 @@
+import { moaiCalendar } from "@/lib/moai/types";
+import { workspaceAccess } from "@/lib/workspace-access";
 import { lectureCalendar } from "@/lib/lectures/types";
 import { requireProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
@@ -10,8 +12,13 @@ export default async function SchedulePage() {
   const profile = await requireProfile();
   const supabase = await createClient();
 
+  const access=await workspaceAccess(supabase,profile.id);
+  if(access.restricted){
+    const [moai,shared]=await Promise.all([supabase.from("moai_gatherings").select("id,title,sessions,state,archived").eq("archived",false),supabase.rpc("moai_shared_schedule")]);
+    return <ScheduleView readOnly moai={moaiCalendar(moai.data||[])} shared={shared.data||[]} moaiError={!!moai.error||!!shared.error} lectures={[]} lecturesError={false} me={{id:profile.id}} today={kstToday()} initialEvents={[]} tasks={[]} invoices={[]} clients={[]} profiles={[]}/>;
+  }
   // 세금계산서 발행일 — 조회는 팀 전체 (쓰기는 owner 전용, RLS 0023)
-  const [eventsRes, tasksRes, invoicesRes, clientsRes, profilesRes, lecturesRes] =
+  const [eventsRes, tasksRes, invoicesRes, clientsRes, profilesRes, lecturesRes,moaiRes] =
     await Promise.all([
       supabase.from("events").select("*").order("event_date"),
       supabase
@@ -25,10 +32,12 @@ export default async function SchedulePage() {
       supabase.from("clients").select("id, name"),
       supabase.from("profiles").select("id, name"),
       supabase.from("lecture_projects").select("id,title,sessions,archived,stage,next_action,next_action_date").eq("archived",false),
+      supabase.from("moai_gatherings").select("id,title,sessions,state,archived").eq("archived",false),
     ]);
 
   return (
     <ScheduleView
+      moai={moaiCalendar(moaiRes.data||[])} moaiError={!!moaiRes.error}
       lectures={lectureCalendar(lecturesRes.data || [])}
       lecturesError={!!lecturesRes.error}
       me={{ id: profile.id }}

@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRestrictedWorkspace } from "@/components/providers/workspace-context";
 import { usePathname, useRouter } from "next/navigation";
 import { parseClientPath } from "@/lib/nav";
 import { useClientContext } from "@/components/providers/client-context";
@@ -16,9 +17,11 @@ async function api(url: string, init?: RequestInit) {
   if (!response.ok) throw new Error(data.error || "연결을 확인하고 다시 시도해 주세요."); return data;
 }
 export function AssistantWidget({ fullPage, visible, onClose }: { fullPage: boolean; visible: boolean; onClose: () => void }) {
+  const restricted=useRestrictedWorkspace();
   const pathname = usePathname(); const router = useRouter(); const { clients } = useClientContext();
+  const moaiId = pathname.match(/^\/moai\/([0-9a-f-]{36})$/)?.[1];
   const lectureId = pathname.match(/^\/lectures\/([0-9a-f-]{36})$/)?.[1];
-  const screenArea = pathname === "/moai" || pathname.startsWith("/moai/") ? "모아이 운영 기획" : pathname === "/lectures" || pathname.startsWith("/lectures/") ? "강의" : "전체 업무";
+  const screenArea = pathname === "/moai" || pathname.startsWith("/moai/") ? "모아이" : pathname === "/lectures" || pathname.startsWith("/lectures/") ? "강의" : "전체 업무";
   const screenClientId = parseClientPath(pathname)?.clientId;
   const [target, setTarget] = useState("auto");
   const selectedId = target === "auto" ? screenClientId : target;
@@ -46,14 +49,14 @@ export function AssistantWidget({ fullPage, visible, onClose }: { fullPage: bool
     const data = await api("/api/assistant/conversations"); setConversations(data.conversations); setArchive(data.archive); setConnected(!!data.connection?.last_success_at); setReady(true); return data.conversations as Conversation[];
   }, []);
   const loadConversation = useCallback(async (id: string, olderPage = 0) => {
-    const [data, actions] = await Promise.all([api(`/api/assistant/conversations?id=${id}&page=${olderPage}`), api(`/api/assistant/actions?conversationId=${id}`)]);
+    const [data, actions] = await Promise.all([api(`/api/assistant/conversations?id=${id}&page=${olderPage}`), (restricted?Promise.resolve({actions:[]}):api(`/api/assistant/actions?conversationId=${id}`))]);
     if (active.current !== id) return;
     if (data.conversation.archived_at) { active.current = null; setConversation(null); setMessages([]); setServerRunning(false); setPendingActions([]); setError("이 대화는 옵시디언에 보관되어 목록에서 정리됐어요."); await loadList(); return; }
     setConversation(data.conversation); setServerRunning(!!data.conversation.active_turn_id);
     setMessages(previous => olderPage ? [...new Map([...data.messages, ...previous].map((m: ChatMessage) => [m.id, m])).values()] : data.messages);
     setMore(data.more); setPage(olderPage); setPendingActions(actions.actions || []);
     return data;
-  }, [loadList]);
+  }, [loadList,restricted]);
   const initialize = useCallback(async () => {
     setLoading(true); setError("");
     try { const list = await loadList(); const id = active.current || [...list].sort((a,b) => b.updated_at.localeCompare(a.updated_at))[0]?.id; if (id) { active.current = id; await loadConversation(id); } }
@@ -102,7 +105,7 @@ export function AssistantWidget({ fullPage, visible, onClose }: { fullPage: bool
   async function send(text = input) {
     text = text.trim(); if (!text || sending.current || busy || targetMissing || !ready) return;
     sending.current = true; setNetworkBusy(true); setError("");
-    const context = target === "auto" && lectureId ? `강의 /lectures/${lectureId}` : selected?.name || (target === "auto" ? screenArea : "전체 업무");
+    const context = target === "auto" && moaiId ? `모아이 /moai/${moaiId}` : target === "auto" && lectureId ? `강의 /lectures/${lectureId}` : selected?.name || (target === "auto" ? screenArea : "전체 업무");
     try {
       const current = conversation || await newConversation();
       setInput("");
@@ -148,7 +151,7 @@ export function AssistantWidget({ fullPage, visible, onClose }: { fullPage: bool
         <div id="assistant-log" ref={log} className={styles.log} role="log" aria-label="비서와의 대화" aria-live="polite" aria-relevant="additions">
           {more && <button className={styles.older} disabled={busy} onClick={() => { if (conversation) void loadConversation(conversation.id, page + 1).catch(e => setError(e.message)); }}>이전 메시지 더 보기</button>}
           {!messages.length && !loading && <div className={styles.welcome}><span aria-hidden>✦</span><strong>오늘은 어떤 일을 함께할까요?</strong><p>회의록과 옵시디언 노트를 참고해 기획을 다듬고,<br />업무·일정·정산도 이어서 처리해요.</p><div className={styles.suggestions}><button disabled={busy || targetMissing} onClick={() => void send("오늘 확인할 업무를 알려줘")}>오늘 확인할 업무 알려줘</button><button onClick={() => setInput("고객 미팅 제안서 구성을 같이 잡아보자. 목표와 고객 상황부터 확인해줘.")}>제안서 기획 함께하기 →</button><button onClick={() => setInput("옵시디언의 비서봇 기획을 찾아보고, 최근 결정한 내용과 다음에 정할 일을 정리해줘.")}>옵시디언 기획 이어가기 →</button></div></div>}
-          {messages.map(message => <article key={message.id} className={`${styles.message} ${message.role === "user" ? styles.user : ""}`}><div className={styles.messageLabel}>{message.role === "user" ? "나" : "RIDIWEB 비서"}<span>{message.role === "user" ? (message.context.startsWith("강의 /lectures/") ? "강의" : message.context) : ""}</span><time>{new Date(message.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time></div><p>{message.content}</p>{!!message.metadata?.actions?.length && <ul className={styles.actions}>{message.metadata.actions.map((action,i) => <li key={i}><span>{action.ok ? (action.name === "delegate_specialist" ? "실무" : "조회") : "확인 필요"}</span> {action.summary}</li>)}</ul>}</article>)}
+          {messages.map(message => <article key={message.id} className={`${styles.message} ${message.role === "user" ? styles.user : ""}`}><div className={styles.messageLabel}>{message.role === "user" ? "나" : "RIDIWEB 비서"}<span>{message.role === "user" ? (message.context.startsWith("강의 /lectures/") ? "강의" : message.context.startsWith("모아이 /moai/") ? "모아이" : message.context) : ""}</span><time>{new Date(message.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time></div><p>{message.content}</p>{!!message.metadata?.actions?.length && <ul className={styles.actions}>{message.metadata.actions.map((action,i) => <li key={i}><span>{action.ok ? (action.name === "delegate_specialist" ? "실무" : "조회") : "확인 필요"}</span> {action.summary}</li>)}</ul>}</article>)}
           {pendingActions.filter(a => a.status === "pending").map(a => <ActionCard key={a.id} action={a} busy={resolving} onResolve={resolveAction} />)}
           {pendingActions.some(a => a.status !== "pending") && <details className={styles.actionHistory}><summary>이 대화의 처리 기록</summary>{pendingActions.filter(a => a.status !== "pending").slice(-10).reverse().map(a => <ActionCard key={a.id} action={a} busy={resolving} onResolve={resolveAction} />)}</details>}
           {(busy || resolving) && <p className={styles.pending} role="status">{loading ? "저장된 대화를 불러오고 있어요…" : resolving ? "확인한 내용을 처리하고 있어요…" : "요청을 저장하고 답변을 준비하고 있어요…"}</p>}

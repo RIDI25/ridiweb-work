@@ -30,7 +30,7 @@ export interface CalPlan {
 
 interface CalItem {
   key: string;
-  kind: "event" | "task" | "invoice" | "publish" | "lecture";
+  kind: "event" | "task" | "invoice" | "publish" | "lecture" | "moai";
   date: string;
   time: string | null;
   label: string;
@@ -41,12 +41,13 @@ interface CalItem {
 
 const KIND_STYLE: Record<CalItem["kind"], string> = {
   lecture: SOURCE_STYLES.lecture,
+  moai: SOURCE_STYLES.moai,
   event: SOURCE_STYLES.event,
   task: SOURCE_STYLES.task,
   invoice: SOURCE_STYLES.invoice,
   publish: "bg-emerald-50 text-emerald-700",
 };
-const KIND_LABEL: Record<CalItem["kind"], string> = { lecture: "강의", event: "일정", task: "업무 마감", invoice: "세금계산서", publish: "발행 예정" };
+const KIND_LABEL: Record<CalItem["kind"], string> = { moai:"모아이", lecture: "강의", event: "일정", task: "업무 마감", invoice: "세금계산서", publish: "발행 예정" };
 
 const input = "rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-accent-deep";
 
@@ -63,8 +64,9 @@ export function HomeCalendar({
   plans,
   clients,
   profiles,
-  lectures,
+  lectures,moai=[],
 }: {
+  moai?: ReturnType<typeof lectureCalendar>;
   lectures: ReturnType<typeof lectureCalendar>;
   today: string;
   me: { id: string };
@@ -91,6 +93,7 @@ export function HomeCalendar({
 
   const items: CalItem[] = [
     ...lectures.map(l=>({...l,kind:"lecture" as const})),
+    ...moai.map(l=>({...l,kind:"moai" as const})),
     ...events.map((e) => ({
       key: `e-${e.id}`,
       kind: "event" as const,

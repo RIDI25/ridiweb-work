@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useId, useState, type ReactNode } from "react";
+import { Suspense, useId, useState, Fragment, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { CONTENT_VIEWS, clientPath, getNavSection, parseClientPath, type ClientTab } from "@/lib/nav";
 import { useClientContext } from "@/components/providers/client-context";
 import { CLIENT_KIND_LABEL, clientKind, type Role } from "@/types/database";
-import { workspaceNav } from "@/lib/workspaces";
-import { useWorkspace } from "@/components/providers/workspace-context";
+import { workspaceNav, WORKSPACES } from "@/lib/workspaces";
+import { useWorkspace, useRestrictedWorkspace } from "@/components/providers/workspace-context";
 import { WorkspaceSwitcher, WorkspaceHomeLink } from "./workspace-switcher";
 import { NavIcon } from "./nav-icon";
 import styles from "./sidebar.module.css";
@@ -73,7 +73,8 @@ function ClientLinks({ search, onNavigate }: { search: boolean; onNavigate?: () 
 function NavListInner({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const workspace = useWorkspace();
-  const items = workspaceNav(workspace);
+  const restricted = useRestrictedWorkspace();
+  const items = workspaceNav(workspace).filter(item=>!restricted||!item.aux);
   const activeSection = getNavSection(pathname, items);
   const [expanded, setExpanded] = useState<{ pathname: string; section: string | null } | null>(null);
   const openSection = expanded?.pathname === pathname ? expanded.section : activeSection;
@@ -86,7 +87,7 @@ function NavListInner({ onNavigate }: { onNavigate?: () => void }) {
       const hasChildren = children.length > 0;
       const open = hasChildren && openSection === item.href;
       const submenuId = `${navId}-${item.href.slice(1)}`;
-      return <div key={item.href} className={styles.group}>
+      return <Fragment key={item.href}><div className={styles.group}>
         <div className={styles.menuRow} data-active={activeSection === item.href}>
           <Link href={item.href} className={styles.mainLink} aria-current={pathname === item.href ? "page" : undefined} onClick={() => { setExpanded({ pathname, section: item.href }); onNavigate?.(); }}>
             {item.icon && <NavIcon name={item.icon} />}<span>{item.label}</span>
@@ -100,7 +101,7 @@ function NavListInner({ onNavigate }: { onNavigate?: () => void }) {
           {children.map(child => <SubLink key={child.href} href={child.href} label={child.label} active={matches(child.href)} onNavigate={onNavigate} />)}
           {item.href === "/clients" && open && inClient && <ClientLinks search={false} onNavigate={onNavigate} />}
         </div>}
-      </div>;
+      </div>{item.href === "/schedule" && <div className={styles.workspaceDivider}><span>{WORKSPACES[workspace].label}</span></div>}</Fragment>;
     })}
     <div className={styles.aux}>{items.filter(item => item.aux).map(item => <SubLink key={item.href} href={item.href} label={item.label} active={matches(item.href)} onNavigate={onNavigate} />)}</div>
   </nav>;

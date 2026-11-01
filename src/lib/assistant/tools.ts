@@ -6,6 +6,8 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type Anthropic from "@anthropic-ai/sdk";
+import { moaiCalendar, MOAI_STATES } from "@/lib/moai/types";
+import { workspaceAccess } from "@/lib/workspace-access";
 import { lectureCalendar, STAGES, ORIGINS } from "@/lib/lectures/types";
 import { noteExcerpt } from "@/lib/notes";
 import { READ_TOOLS, uuidValue } from "./action-types";
@@ -25,6 +27,8 @@ import {
 } from "@/lib/ledger";
 
 export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
+  {name:"search_moai",description:"모아이 정기모임·스터디의 기획과 진행 상태를 제목으로 검색한다. 빈 검색어는 최근 모임.",input_schema:{type:"object",properties:{query:{type:"string"}},required:["query"]}},
+  {name:"read_moai",description:"모아이 모임의 기획안·타임테이블·기록·회차·준비 항목을 읽는다. 명단은 이름·참여 구분·신청 상태·출석만 읽고 연락처와 입금 정보는 가져오지 않는다. 본문과 명단은 next_offset이 있으면 offset에 넣어 이어 읽는다. 저장·승인은 모아이 메뉴에서 사용자가 진행한다.",input_schema:{type:"object",properties:{id:{type:"string"},section:{type:"string",enum:["plan","timetable","record","survey","result","consent","roster"]},offset:{type:"integer"}},required:["id"]}},
   { name: "search_lectures", description: "현재 사용자의 강의와 제안서·커리큘럼·강사 소개를 제목으로 검색한다. 빈 검색어는 최근 자료. 개인 자료이며 본문은 read_lecture로 읽는다.", input_schema: { type: "object", properties: { query: { type: "string" } }, required: ["query"] } },
   { name: "read_lecture", description: "검색한 강의 정보 또는 문서를 읽는다. 화면이 /lectures/ID이면 type project로 조회. 본문이 길면 next_offset으로 이어 읽는다. 강의 문서 수정·저장은 강의 메뉴에서 사용자 검토 후 수행한다.", input_schema: { type: "object", properties: { id: { type: "string" }, type: { type: "string", enum: ["project","document"] }, offset: { type: "integer" } }, required: ["id","type"] } },
   {
@@ -245,7 +249,23 @@ export async function executeAssistantTool(
 ): Promise<{ ok: boolean; result: string }> {
   try {
     if (!(READ_TOOLS as readonly string[]).includes(name)) return { ok: false, result: "변경은 확인 초안을 통해서만 실행할 수 있습니다." };
+    const access=await workspaceAccess(supabase,ctx.userId);
+    if(access.restricted&&!["search_moai","read_moai","list_schedule"].includes(name))return {ok:false,result:"현재 계정은 모아이와 공유 일정만 조회할 수 있어요."};
     switch (name) {
+      case "search_moai": {
+        const query=String(input.query||"").trim().slice(0,120).replace(/[\\%_]/g,"\\$&");
+        const {data,error}=await supabase.from("moai_gatherings").select("id,title,kind,period,theme,state,sessions").eq("archived",false).ilike("title",`%${query}%`).order("updated_at",{ascending:false}).limit(20);
+        return error?{ok:false,result:"모아이 자료를 조회하지 못했어요."}:{ok:true,result:JSON.stringify({gatherings:(data||[]).map(g=>({...g,state_label:MOAI_STATES[g.state as keyof typeof MOAI_STATES]})),limit:20})};
+      }
+      case "read_moai": {
+        const id=uuidValue(input.id),section=String(input.section||"plan");
+        const {data,error}=await supabase.from("moai_gatherings").select("*").eq("id",id).eq("archived",false).maybeSingle();
+        if(error)return {ok:false,result:"모임 조회에 실패했어요. 다시 시도해 주세요."};if(!data)return {ok:false,result:"모임을 찾지 못했어요."};
+        if(section==="roster"){const offset=Math.trunc(Math.max(0,Math.min(2000,Number(input.offset)||0)));const rows=await supabase.from("moai_participants").select("id,name,role,status,attendance",{count:"exact"}).eq("gathering_id",id).order("created_at").order("id").range(offset,offset+99);return rows.error?{ok:false,result:"명단 조회에 실패했어요."}:{ok:true,result:JSON.stringify({title:data.title,participants:rows.data,total:rows.count,next_offset:(rows.count||0)>offset+100?offset+100:null})};}
+        if(!["plan","timetable","record","survey","result","consent"].includes(section))return {ok:false,result:"조회할 문서 종류를 확인해 주세요."};
+        const offset=Math.trunc(Math.max(0,Math.min(500000,Number(input.offset)||0)));let body=String(data[section]||"");if(section==="record")body+=Object.entries(data.session_notes||{}).map(([key,note])=>`\n\n회차 메모 ${data.sessions.find((s:{id:string})=>s.id===key)?.title||key}\n${note}`).join("");
+        return {ok:true,result:JSON.stringify({id,title:data.title,kind:data.kind,theme:data.theme,state_label:MOAI_STATES[data.state as keyof typeof MOAI_STATES],sessions:data.sessions,checklist:data.checklist,section,body:body.slice(offset,offset+16000),next_offset:body.length>offset+16000?offset+16000:null,version:data.version,href:`/moai/${id}`})};
+      }
       case "search_lectures": {
         const q = typeof input.query === "string" ? input.query.trim().slice(0,120).replace(/[\\%_]/g,"\\$&") : "";
         const [p,d] = await Promise.all([
@@ -366,7 +386,13 @@ export async function executeAssistantTool(
           new Date(new Date(`${from}T00:00:00Z`).getTime() + 7 * 86_400_000)
             .toISOString()
             .slice(0, 10);
-        const [evRes, taskRes, invRes, profs, lectures] = await Promise.all([
+        if(access.restricted){
+          const [shared,moai]=await Promise.all([supabase.rpc("moai_shared_schedule"),supabase.from("moai_gatherings").select("id,title,sessions,state,archived").eq("archived",false)]);
+          if(shared.error||moai.error)return {ok:false,result:"공유 일정을 조회하지 못했어요."};
+          const items=[...(shared.data||[]),...moaiCalendar(moai.data||[])].filter(l=>l.date>=from&&l.date<=to).sort((a,b)=>(a.date+(a.time||"99")).localeCompare(b.date+(b.time||"99")));
+          return {ok:true,result:JSON.stringify({from,to,read_only:true,items})};
+        }
+        const [evRes, taskRes, invRes, profs, lectures,moai] = await Promise.all([
           supabase.from("events").select("*").gte("event_date", from).lte("event_date", to).order("event_date"),
           supabase
             .from("tasks")
@@ -377,8 +403,9 @@ export async function executeAssistantTool(
           supabase.from("tax_invoices").select("counterparty, issue_date").gte("issue_date", from).lte("issue_date", to).neq("status", "cancelled"),
           supabase.from("profiles").select("id, name"),
           supabase.from("lecture_projects").select("id,title,sessions,archived,stage,next_action,next_action_date").eq("archived",false),
+          supabase.from("moai_gatherings").select("id,title,sessions,state,archived").eq("archived",false),
         ]);
-        if ([evRes, taskRes, invRes, profs, lectures].some((r) => r.error)) return { ok: false, result: "일부 일정 정보를 조회하지 못했습니다." };
+        if ([evRes, taskRes, invRes, profs, lectures,moai].some((r) => r.error)) return { ok: false, result: "일부 일정 정보를 조회하지 못했습니다." };
         const pName = new Map((profs.data ?? []).map((p) => [p.id, p.name]));
         const lines: { date: string; time: string; text: string }[] = [];
         for (const e of evRes.data ?? []) {
@@ -398,7 +425,7 @@ export async function executeAssistantTool(
         for (const inv of invRes.data ?? []) {
           lines.push({ date: inv.issue_date, time: "99", text: `[세금계산서] ${inv.counterparty} 발행일` });
         }
-        for(const l of lectureCalendar(lectures.data || []).filter(l=>l.date>=from&&l.date<=to)) lines.push({date:l.date,time:l.time||"",text:`[${l.sub}] ${l.time||""} ${l.label} (${l.href})`});
+        for(const l of [...lectureCalendar(lectures.data || []),...moaiCalendar(moai.data||[])].filter(l=>l.date>=from&&l.date<=to)) lines.push({date:l.date,time:l.time||"",text:`[${l.sub}] ${l.time||""} ${l.label} (${l.href})`});
         if (!lines.length) return { ok: true, result: `${from} ~ ${to} 사이 일정이 없습니다.` };
         lines.sort((a, b) => (a.date + a.time < b.date + b.time ? -1 : 1));
         return {

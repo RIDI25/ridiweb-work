@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-const f = vi.hoisted(() => ({ model: vi.fn(), read: vi.fn(), prepare: vi.fn(), insert: vi.fn(), save: vi.fn(), usage: vi.fn(), begin: vi.fn(), finish: vi.fn(), history: vi.fn(), specialist: vi.fn() }));
+const f = vi.hoisted(() => ({ access: vi.fn(), model: vi.fn(), read: vi.fn(), prepare: vi.fn(), insert: vi.fn(), save: vi.fn(), usage: vi.fn(), begin: vi.fn(), finish: vi.fn(), history: vi.fn(), specialist: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     auth: { getUser: async () => ({ data: { user: { id: "me" } } }) }, rpc: f.begin,
@@ -9,6 +9,7 @@ vi.mock("@/lib/supabase/server", () => ({
   createAdminClient: () => ({ rpc: f.finish, from: () => ({ insert: (payload: unknown) => { f.insert(payload); return { select: () => ({ single: f.save }) }; } }) }),
 }));
 vi.mock("@/lib/anthropic", async (importOriginal) => ({ ...await importOriginal<typeof import("@/lib/anthropic")>(), createAnthropic: () => ({ messages: { create: f.model } }) }));
+vi.mock("@/lib/workspace-access", () => ({ workspaceAccess: f.access }));
 vi.mock("@/lib/assistant/tools", () => ({ ASSISTANT_TOOLS: [], executeAssistantTool: f.read }));
 vi.mock("@/lib/assistant/prepare-action", () => ({ prepareAction: f.prepare }));
 vi.mock("@/lib/assistant/specialist", async (original) => ({ ...await original<typeof import("@/lib/assistant/specialist")>(), runSpecialist: f.specialist }));
@@ -20,6 +21,7 @@ const request = (messages = [{ role: "user", content: "업무를 등록해줘" }
 };
 beforeEach(() => {
   vi.clearAllMocks();
+  f.access.mockResolvedValue({restricted:false,moaiRole:"reviewer"});
   f.begin.mockResolvedValue({ data: { status: "started" }, error: null });
   f.finish.mockResolvedValue({ data: "saved-message", error: null });
   f.model.mockResolvedValue({ usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: "text", text: "등록 완료했습니다" }, { type: "tool_use", id: "tool1", name: "create_task", input: { title: "점검" } }] });
@@ -116,4 +118,17 @@ describe("Fable delegates work to Astra", () => {
     const data = await (await POST(request())).json();
     expect(data.pendingActions).toHaveLength(1); expect(data.text).toContain("확인할 초안"); expect(f.read).not.toHaveBeenCalled();
   });
+});
+
+
+describe("MoAI scope boundary", () => {
+ it("fails closed before loading conversations when access lookup fails", async () => {
+  f.access.mockRejectedValue(new Error("offline"));
+  const response=await POST(request());expect(response.status).toBe(503);expect(f.begin).not.toHaveBeenCalled();expect(f.model).not.toHaveBeenCalled();
+ });
+ it("rejects a model's out-of-scope read and write tools for an operator", async () => {
+  f.access.mockResolvedValue({restricted:true,moaiRole:"operator"});
+  f.model.mockResolvedValueOnce({usage:{input_tokens:1,output_tokens:1},content:[{type:"tool_use",id:"a",name:"list_tax_invoices",input:{}},{type:"tool_use",id:"b",name:"create_task",input:{title:"x"}}]}).mockResolvedValueOnce({usage:{input_tokens:1,output_tokens:1},content:[{type:"text",text:"권한 범위 밖의 업무예요."}]});
+  const result=await (await POST(request())).json();expect(result.ok).toBe(true);expect(f.read).not.toHaveBeenCalled();expect(f.prepare).not.toHaveBeenCalled();expect(f.insert).not.toHaveBeenCalled();expect(f.model.mock.calls[1][0].messages.at(-1).content.every((r:{is_error:boolean})=>r.is_error)).toBe(true);
+ });
 });

@@ -7,13 +7,15 @@ function subscribe(notify:()=>void){window.addEventListener("storage",notify);wi
 let memory:WorkspaceId="optify";
 function snapshot():WorkspaceId {try{const saved=window.localStorage.getItem(KEY);return isWorkspace(saved)?saved:memory;}catch{return memory;}}
 function remember(workspace:WorkspaceId){memory=workspace;try{window.localStorage.setItem(KEY,workspace);}catch{}window.dispatchEvent(new Event(EVENT));}
+const RestrictedContext=createContext(false);
+export function useRestrictedWorkspace(){return useContext(RestrictedContext);}
 const WorkspaceContext=createContext<WorkspaceId>("optify");
-export function WorkspaceProvider({children}:{children:ReactNode}){
+export function WorkspaceProvider({children,restricted=false}:{children:ReactNode;restricted?:boolean}){
  const pathname=usePathname();
  const previous=useSyncExternalStore(subscribe,snapshot,()=>"optify" as WorkspaceId);
  const routed=workspaceForPath(pathname);
- const workspace=routed||previous;
+ const workspace=restricted?"moai":routed||previous;
  useEffect(()=>{if(routed)remember(routed);},[routed]);
- return <WorkspaceContext.Provider value={workspace}>{children}</WorkspaceContext.Provider>;
+ return <RestrictedContext.Provider value={restricted}><WorkspaceContext.Provider value={workspace}>{children}</WorkspaceContext.Provider></RestrictedContext.Provider>;
 }
 export function useWorkspace(){return useContext(WorkspaceContext);}

@@ -1,3 +1,4 @@
+import { allowedMoaiPath } from "@/lib/workspace-access";
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
@@ -44,6 +45,15 @@ export async function updateSession(request: NextRequest) {
     url.pathname = "/login";
     url.searchParams.set("redirect", pathname);
     return NextResponse.redirect(url);
+  }
+
+  if (user && !isPublic) {
+    const { data: access, error } = await supabase.from("ridiweb_access").select("scope").eq("user_id",user.id).maybeSingle();
+    if (error) return NextResponse.json({error:"업무 공간 권한을 확인하지 못했어요. 잠시 후 다시 시도해 주세요."},{status:503});
+    if (access?.scope === "moai" && !allowedMoaiPath(pathname)) {
+      if(pathname.startsWith("/api/")) return NextResponse.json({error:"이 업무 공간에 접근할 수 없어요."},{status:403});
+      const url=request.nextUrl.clone();url.pathname="/moai";url.search="";return NextResponse.redirect(url);
+    }
   }
 
   if (user && pathname === "/login") {

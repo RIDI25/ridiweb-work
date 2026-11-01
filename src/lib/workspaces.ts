@@ -26,7 +26,8 @@ export function workspaceNav(workspace:WorkspaceId): NavItem[] {
     {href:"/lectures/profile",label:"강사 소개 · 이력",icon:"clients"},...settings];
   if(workspace==="moai") return [...common,
     {href:"/moai",label:"모임 운영",icon:"clients"},
-    {href:"/moai/templates",label:"운영 양식",icon:"notes"},...settings];
+    {href:"/moai/review",label:"검토 · 승인",icon:"notes"},
+    {href:"/moai/templates",label:"공통 양식",icon:"notes"},...settings];
   return [...common,
     {href:"/",label:"오늘 할 일",icon:"notes"},
     {href:"/tasks",label:"업무 보드",parent:"/"},

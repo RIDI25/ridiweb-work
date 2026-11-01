@@ -58,3 +58,12 @@ Settings → API에서 URL / anon key / service_role key를 복사해 `.env.loca
 ## 0036 — 개인 강의 관리
 
 `migrations/0036_lectures.sql`을 코드 배포 전에 실행한다. 2026-11-01 ridiweb-work (`riblksexnoijlgruviqi`)에 SQL Editor로 적용 완료. 새 테이블 3개이며 기존 업무 테이블은 변경하지 않는다. 재실행 가능. 본인 RLS와 문서별 저장 이력·버전 잠금, 확정본 수정 시 초안 전환을 적용한다. `PGLITE_MODULE`을 지정한 `node supabase/tests/lectures.mjs`로 계정 격리·소유권/이력 위조 차단·확정본 보존을 검증한다. 초기 실제 강의 정보는 사용자 화면에서 작성하며 마이그레이션에 개인 데이터를 넣지 않는다.
+
+
+## 0037 / 0038 — 모아이 운영과 공간별 접근
+
+0037 모아이 운영, 0038 공간 접근 제한 순서로 코드 배포 전에 실행한다. 둘 다 재실행 가능하다. 역할 배정은 실제 계정 확인 후 별도로 진행: `moai_members`의 reviewer/operator, `ridiweb_access`의 full/moai와 공유 일정 소유자, profiles의 기존 owner/member 역할을 함께 맞춘다. 멤버십/접근 행에는 사용자 쓰기 권한이 없으며 임의 이메일로 계정을 만들거나 기존 이름을 자동 매칭하지 않는다.
+
+모아이 전용 사용자는 기존 비즈니스 테이블과 private Storage를 조회·변경할 수 없다. 안전한 공유 일정 함수는 소유자 담당 또는 소유자가 만든 미지정 일정의 제목·일시만 반환하고 고객/메모/금액은 반환하지 않는다. 새 사업 테이블이나 보안 정의 함수를 추가할 때에도 `has_optify_access()` 제한을 명시적으로 적용해야 한다.
+
+검증: `PGLITE_MODULE`을 지정한 `node supabase/tests/moai.mjs` 및 `node supabase/tests/workspace-access.mjs`. 메모리 PostgreSQL에서 회원 격리, 승인 역할, 버전 충돌, 정원, 중복 가져오기, 출석 회차, 공유 일정 최소 공개, 기존 승인 함수와 Storage 우회 차단을 검사한다. 운영 DB에는 테스트 명단을 만들지 않는다.
