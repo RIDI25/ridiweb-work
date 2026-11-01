@@ -1,3 +1,4 @@
+import { isMoaiWriteTool, prepareMoaiAction } from "./moai-actions";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { TASK_PRIORITIES, TASK_STATUSES, TASK_TYPES, taskStatusLabel, taskTypeLabel, taskPriorityDef } from "@/lib/tasks";
 import { EVENT_TYPES, eventTypeLabel } from "@/lib/schedule";
@@ -39,6 +40,7 @@ export async function resolveCustomer(db: SupabaseClient, raw: unknown) {
 
 /** Resolve and freeze every target/default before showing the approval card. Never writes business data. */
 export async function prepareAction(db: SupabaseClient, name: WriteTool, input: Record<string, unknown>, ctx: { userId: string; role: string; today: string }) {
+  if (isMoaiWriteTool(name)) return prepareMoaiAction(db, name, input, ctx.userId);
   if (["add_tax_invoice", "add_invoice_payment", "add_lead"].includes(name) && ctx.role !== "owner") throw new Error("이 기록은 owner만 등록할 수 있습니다.");
   const fields: ActionDisplay["fields"] = [];
   const field = (label: string, value: unknown) => fields.push({ label, value: value === null || value === undefined || value === "" ? "미정" : String(value) });

@@ -1,5 +1,5 @@
 export const READ_TOOLS = ["list_tasks", "list_schedule", "list_tax_invoices", "get_revenue_summary", "search_notes", "read_note", "search_lectures", "read_lecture", "search_moai", "read_moai"] as const;
-export const WRITE_TOOLS = ["create_task", "update_task_status", "set_task_waiting", "create_event", "add_tax_invoice", "add_invoice_payment", "add_lead", "add_ledger_entry"] as const;
+export const WRITE_TOOLS = ["create_task", "update_task_status", "set_task_waiting", "create_event", "add_tax_invoice", "add_invoice_payment", "add_lead", "add_ledger_entry", "create_moai_gathering", "upsert_moai_sessions"] as const;
 export type WriteTool = typeof WRITE_TOOLS[number];
 export type ActionStatus = "pending" | "succeeded" | "cancelled" | "failed" | "expired";
 export interface ActionDisplay { title: string; fields: { label: string; value: string }[]; note?: string }
@@ -10,7 +10,7 @@ export interface PendingAction {
   status: ActionStatus;
   expires_at: string;
   created_at: string;
-  result: { ok: boolean; message: string; record_id?: string } | null;
+  result: { ok: boolean; message: string; record_id?: string; href?: string } | null;
 }
 export const ACTION_SELECT = "id, tool_name, display, status, expires_at, created_at, result";
 export const isWriteTool = (name: string): name is WriteTool => (WRITE_TOOLS as readonly string[]).includes(name);

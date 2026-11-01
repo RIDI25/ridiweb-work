@@ -26,9 +26,25 @@ import {
   PAYMENT_METHODS,
 } from "@/lib/ledger";
 
+const moaiSessionProperties = {
+  title: { type: "string", description: "회차명. 새 회차에서 생략하면 순서에 따라 1회차 등으로 설정" },
+  date: { type: "string", description: "한국 날짜 YYYY-MM-DD. 새 회차는 필수" },
+  start: { type: "string", description: "시작 HH:MM. 시간을 정하면 종료도 함께 입력" },
+  end: { type: "string", description: "종료 HH:MM. 시작 이후, 같은 날짜" },
+  location: { type: "string", description: "장소. 미정이면 생략" },
+};
+
 export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
+  { name: "create_moai_gathering", description: "모아이 스터디·월 정기모임과 여러 회차 일정을 하나의 확인 초안으로 만든다. search_moai로 중복 확인 후 사용한다. 확인 후 함께 저장되어 통합 캘린더에 가안으로 표시된다. 기획 최종 승인은 별도다. 모임만 생성할 때 sessions는 생략한다.", input_schema: { type: "object", properties: {
+    title: { type: "string", description: "모임명. 요청에 맞는 이름을 초안으로 제안 가능" }, kind: { type: "string", enum: ["study", "monthly"] },
+    period: { type: "string", description: "운영 월 YYYY-MM" }, theme: { type: "string" }, capacity: { type: "integer", minimum: 0, maximum: 10000 }, fee: { type: "integer", minimum: 0, maximum: 10000000, description: "참가비 원 단위. 미정이면 생략하고 초안에 미정 표시" },
+    sessions: { type: "array", maxItems: 60, items: { type: "object", properties: moaiSessionProperties, required: ["date"], additionalProperties: false } },
+  }, required: ["title", "kind"], additionalProperties: false } },
+  { name: "upsert_moai_sessions", description: "기존 모아이 모임의 회차 일정을 추가·수정하는 확인 초안. 먼저 read_moai로 조회한다. 새 회차는 id 생략, 기존 회차는 조회한 id를 지정. 생략한 기존 회차와 출석 기록·문서는 보존하고 회차 삭제는 하지 않는다. 승인 상태의 일정 변경은 기획 중으로 돌아간다.", input_schema: { type: "object", properties: {
+    gathering_id: { type: "string" }, sessions: { type: "array", minItems: 1, maxItems: 60, items: { type: "object", properties: { id: { type: "string", description: "수정할 기존 회차 ID. 새 회차는 생략" }, ...moaiSessionProperties }, additionalProperties: false } },
+  }, required: ["gathering_id", "sessions"], additionalProperties: false } },
   {name:"search_moai",description:"모아이 정기모임·스터디의 기획과 진행 상태를 제목으로 검색한다. 빈 검색어는 최근 모임.",input_schema:{type:"object",properties:{query:{type:"string"}},required:["query"]}},
-  {name:"read_moai",description:"모아이 모임의 기획안·타임테이블·기록·회차·준비 항목을 읽는다. 명단은 이름·참여 구분·신청 상태·출석만 읽고 연락처와 입금 정보는 가져오지 않는다. 본문과 명단은 next_offset이 있으면 offset에 넣어 이어 읽는다. 저장·승인은 모아이 메뉴에서 사용자가 진행한다.",input_schema:{type:"object",properties:{id:{type:"string"},section:{type:"string",enum:["plan","timetable","record","survey","result","consent","roster"]},offset:{type:"integer"}},required:["id"]}},
+  {name:"read_moai",description:"모아이 모임의 기획안·타임테이블·기록·회차·준비 항목을 읽는다. 명단은 이름·참여 구분·신청 상태·출석만 읽고 연락처와 입금 정보는 가져오지 않는다. 본문과 명단은 next_offset이 있으면 offset에 넣어 이어 읽는다. 모임 생성과 회차 추가·수정은 전용 확인 초안 도구를 사용한다. 최종 기획 승인은 모아이 메뉴에서 진행한다.",input_schema:{type:"object",properties:{id:{type:"string"},section:{type:"string",enum:["plan","timetable","record","survey","result","consent","roster"]},offset:{type:"integer"}},required:["id"]}},
   { name: "search_lectures", description: "현재 사용자의 강의와 제안서·커리큘럼·강사 소개를 제목으로 검색한다. 빈 검색어는 최근 자료. 개인 자료이며 본문은 read_lecture로 읽는다.", input_schema: { type: "object", properties: { query: { type: "string" } }, required: ["query"] } },
   { name: "read_lecture", description: "검색한 강의 정보 또는 문서를 읽는다. 화면이 /lectures/ID이면 type project로 조회. 본문이 길면 next_offset으로 이어 읽는다. 강의 문서 수정·저장은 강의 메뉴에서 사용자 검토 후 수행한다.", input_schema: { type: "object", properties: { id: { type: "string" }, type: { type: "string", enum: ["project","document"] }, offset: { type: "integer" } }, required: ["id","type"] } },
   {

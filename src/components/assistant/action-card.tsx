@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import type { PendingAction } from "@/lib/assistant/action-types";
 import styles from "./assistant-widget.module.css";
 
@@ -17,5 +18,6 @@ export function ActionCard({ action, busy, onResolve }: { action: PendingAction;
         <button type="button" disabled={busy} onClick={() => onResolve(action, "cancel")}>취소</button>
       </div>
     </> : <p className={styles.actionNote} role="status">{action.result?.message}</p>}
+    {action.status === "succeeded" && action.result?.href && /^\/moai\/[0-9a-f-]{36}$/i.test(action.result.href) && <Link className={styles.actionNote} href={action.result.href}>모아이 모임 열기 ↗</Link>}
   </article>;
 }

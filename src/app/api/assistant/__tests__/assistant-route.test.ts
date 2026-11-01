@@ -10,7 +10,7 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 vi.mock("@/lib/anthropic", async (importOriginal) => ({ ...await importOriginal<typeof import("@/lib/anthropic")>(), createAnthropic: () => ({ messages: { create: f.model } }) }));
 vi.mock("@/lib/workspace-access", () => ({ workspaceAccess: f.access }));
-vi.mock("@/lib/assistant/tools", () => ({ ASSISTANT_TOOLS: [], executeAssistantTool: f.read }));
+vi.mock("@/lib/assistant/tools", () => ({ ASSISTANT_TOOLS: ["create_moai_gathering","upsert_moai_sessions","search_moai","read_moai","list_schedule"].map(name => ({name})), executeAssistantTool: f.read }));
 vi.mock("@/lib/assistant/prepare-action", () => ({ prepareAction: f.prepare }));
 vi.mock("@/lib/assistant/specialist", async (original) => ({ ...await original<typeof import("@/lib/assistant/specialist")>(), runSpecialist: f.specialist }));
 vi.mock("@/lib/usage", () => ({ logApiUsage: f.usage }));
@@ -131,4 +131,26 @@ describe("MoAI scope boundary", () => {
   f.model.mockResolvedValueOnce({usage:{input_tokens:1,output_tokens:1},content:[{type:"tool_use",id:"a",name:"list_tax_invoices",input:{}},{type:"tool_use",id:"b",name:"create_task",input:{title:"x"}}]}).mockResolvedValueOnce({usage:{input_tokens:1,output_tokens:1},content:[{type:"text",text:"권한 범위 밖의 업무예요."}]});
   const result=await (await POST(request())).json();expect(result.ok).toBe(true);expect(f.read).not.toHaveBeenCalled();expect(f.prepare).not.toHaveBeenCalled();expect(f.insert).not.toHaveBeenCalled();expect(f.model.mock.calls[1][0].messages.at(-1).content.every((r:{is_error:boolean})=>r.is_error)).toBe(true);
  });
+});
+
+
+describe("MoAI write confirmation", () => {
+  it("offers MoAI creation to an operator and stores one combined confirmation draft", async () => {
+    f.access.mockResolvedValue({ restricted: true, moaiRole: "operator" });
+    f.model.mockResolvedValueOnce({ usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: "tool_use", id: "moai", name: "create_moai_gathering", input: { title: "목요일 스터디", kind: "study", sessions: [{ date: "2026-11-05" }] } }] });
+    const result = await (await POST(request())).json();
+    expect(result.pendingActions).toHaveLength(1);
+    expect(f.prepare).toHaveBeenCalledWith(expect.anything(), "create_moai_gathering", expect.objectContaining({ kind: "study" }), expect.anything());
+    expect(f.insert).toHaveBeenCalledWith(expect.objectContaining({ tool_name: "create_moai_gathering", user_id: "me" }));
+    expect(f.read).not.toHaveBeenCalled();
+    expect(f.model.mock.calls[0][0].tools.map((t: { name: string }) => t.name)).toContain("upsert_moai_sessions");
+    expect(result.text).toContain("확인 후 반영");
+  });
+  it("rejects model-requested MoAI writes when membership is absent, even for an Optify owner", async () => {
+    f.access.mockResolvedValue({ restricted: false, moaiRole: null });
+    f.model.mockResolvedValueOnce({ usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: "tool_use", id: "moai", name: "create_moai_gathering", input: {} }] }).mockResolvedValueOnce({ usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: "text", text: "권한을 확인해 주세요." }] });
+    await POST(request());
+    expect(f.prepare).not.toHaveBeenCalled(); expect(f.insert).not.toHaveBeenCalled();
+    expect(f.model.mock.calls[0][0].tools.map((t: { name: string }) => t.name)).not.toContain("create_moai_gathering");
+  });
 });

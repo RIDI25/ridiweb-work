@@ -26,8 +26,8 @@ describe('MoAI form and calendar boundaries',()=>{
   expect(list).toHaveLength(1);expect(list[0]).toMatchObject({date:'2026-11-05',label:'[가안] 모임 · 1회차',href:`/moai/${sid}`});
  });
  it('allows only MoAI, private chat and calendar paths for operators',()=>{
-  for(const p of ['/moai','/moai/templates','/api/moai/attendance','/assistant','/api/assistant/conversations','/schedule'])expect(allowedMoaiPath(p)).toBe(true);
-  for(const p of ['/clients','/lectures','/settings','/api/assistant/actions','/api/moaix','/schedule-edit'])expect(allowedMoaiPath(p)).toBe(false);
+  for(const p of ['/moai','/moai/templates','/api/moai/attendance','/assistant','/api/assistant/conversations','/api/assistant/actions','/schedule'])expect(allowedMoaiPath(p)).toBe(true);
+  for(const p of ['/clients','/lectures','/settings','/api/assistant/actions/other','/api/moaix','/schedule-edit'])expect(allowedMoaiPath(p)).toBe(false);
  });
  it('never treats a failed access lookup as unrestricted',async()=>{
   const db={from:()=>({select:()=>({eq:()=>({maybeSingle:async()=>({data:null,error:{message:'offline'}})})})})} as unknown as SupabaseClient;
