@@ -10,7 +10,7 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 vi.mock("@/lib/anthropic", async (importOriginal) => ({ ...await importOriginal<typeof import("@/lib/anthropic")>(), createAnthropic: () => ({ messages: { create: f.model } }) }));
 vi.mock("@/lib/workspace-access", () => ({ workspaceAccess: f.access }));
-vi.mock("@/lib/assistant/tools", () => ({ ASSISTANT_TOOLS: ["create_moai_gathering","upsert_moai_sessions","search_moai","read_moai","list_schedule"].map(name => ({name})), executeAssistantTool: f.read }));
+vi.mock("@/lib/assistant/tools", () => ({ ASSISTANT_TOOLS: ["create_task","list_tasks","create_lecture_project","update_lecture_project","save_lecture_document","search_lectures","read_lecture","create_moai_gathering","upsert_moai_sessions","search_moai","read_moai","list_schedule"].map(name => ({name})), executeAssistantTool: f.read }));
 vi.mock("@/lib/assistant/prepare-action", () => ({ prepareAction: f.prepare }));
 vi.mock("@/lib/assistant/specialist", async (original) => ({ ...await original<typeof import("@/lib/assistant/specialist")>(), runSpecialist: f.specialist }));
 vi.mock("@/lib/usage", () => ({ logApiUsage: f.usage }));
@@ -153,4 +153,28 @@ describe("MoAI write confirmation", () => {
     expect(f.prepare).not.toHaveBeenCalled(); expect(f.insert).not.toHaveBeenCalled();
     expect(f.model.mock.calls[0][0].tools.map((t: { name: string }) => t.name)).not.toContain("create_moai_gathering");
   });
+});
+
+
+describe("lecture writes stay behind confirmation and personal workspace access", () => {
+  for (const name of ["create_lecture_project", "update_lecture_project", "save_lecture_document"]) {
+    it(`prepares ${name} for the full workspace`, async () => {
+      f.model.mockResolvedValue({usage:{input_tokens:1,output_tokens:1},content:[{type:"tool_use",id:"lecture",name,input:{title:"강의"}}]});
+      const data=await (await POST(request())).json();
+      expect(data.pendingActions).toHaveLength(1);expect(f.read).not.toHaveBeenCalled();
+      expect(f.insert).toHaveBeenCalledWith(expect.objectContaining({tool_name:name,user_id:"me"}));
+      expect(f.model.mock.calls[0][0].tools.some((t:{name:string})=>t.name===name)).toBe(true);
+    });
+    it(`rejects forged ${name} calls from a MoAI-only operator`, async () => {
+      f.access.mockResolvedValue({restricted:true,moaiRole:"operator"});
+      f.model.mockResolvedValueOnce({usage:{input_tokens:1,output_tokens:1},content:[{type:"tool_use",id:"lecture",name,input:{}}]}).mockResolvedValueOnce({usage:{input_tokens:1,output_tokens:1},content:[{type:"text",text:"권한을 확인해 주세요."}]});
+      await POST(request());expect(f.prepare).not.toHaveBeenCalled();expect(f.insert).not.toHaveBeenCalled();expect(f.read).not.toHaveBeenCalled();
+      expect(f.model.mock.calls[0][0].tools.some((t:{name:string})=>t.name===name)).toBe(false);
+    });
+  }
+});
+
+it("never saves a partially generated document tool call",async()=>{
+  f.model.mockResolvedValue({usage:{input_tokens:1,output_tokens:8192},stop_reason:"max_tokens",content:[{type:"tool_use",id:"cut",name:"save_lecture_document",input:{body:"partial"}}]});
+  const data=await (await POST(request())).json();expect(data.ok).toBe(false);expect(f.prepare).not.toHaveBeenCalled();expect(f.insert).not.toHaveBeenCalled();
 });

@@ -13,7 +13,7 @@ function database(tables: Record<string, { data: unknown; error?: unknown }>) {
     return query;
   } } as unknown as SupabaseClient;
 }
-const gathering = { id, title: "목요일 스터디", kind: "study", period: "2026-11", theme: "독서", state: "approved", capacity: 12, fee: 10000, sessions: [session], checklist: [{ id: "c", title: "준비", done: true }], ...TEMPLATE_BODIES, session_notes: { [id]: "메모 보존" }, archived: false, version: 3 } as Gathering;
+const gathering = { id, title: "목요일 스터디", kind: "study", period: "2026-11", theme: "독서", state: "approved", capacity: 12, fee: 10000, sessions: [session], checklist: [{ id: "c", title: "준비", done: true }], ...TEMPLATE_BODIES, session_notes: { [id]: "메모 보존" }, archived: false, version: 3, approved_by: id, approved_version: 3, reviewed_at: "2026-11-01T00:00:00Z", updated_at: "2026-11-01T00:00:00Z" } as Gathering;
 const membership = { data: { role: "operator" } };
 
 describe("MoAI assistant preparation", () => {

@@ -122,3 +122,8 @@
 
 .popup .headerActions { gap:8px; }
 .popup .headerActions .modelTeam,.popup .headerActions > button span { display:none; }
+
+.documentReview { margin: 12px 0; font-size: 13px; }
+.documentReview summary { cursor: pointer; padding: 8px 0; font-weight: 600; }
+.documentReview pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.7; max-height: 360px; overflow-y: auto; padding: 12px; background: var(--surface-alt, rgba(128,128,128,.07)); border-radius: 8px; }
+.actionButtons a { font-size: 12px; text-decoration: underline; text-underline-offset: 3px; }
