@@ -1,40 +1,70 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
-/*
- * 옵티파이 워크스페이스 디자인 토큰
- * 화이트 모드. 옵티파이 트래커와 같은 블루 포인트(#2563eb). 악센트는 버튼·포인트에만 사용(넓은 면적 금지).
- */
+/* Shared neutrals, with a distinct accent for each workspace. */
 @theme {
-  --color-accent: #2563eb; /* 블루 — 버튼·포인트 전용 */
-  --color-accent-deep: #1d4ed8; /* 보조 딥 블루 */
-  --color-tint: #eff6ff; /* 틴트 배경 (연한 파랑) */
-  --color-ink: #111827; /* 잉크(본문 텍스트) */
-
+  --color-accent: #257956;
+  --color-accent-deep: #176343;
+  --color-on-accent: #ffffff;
+  --color-tint: #eaf4ee;
+  --color-ink: #22252a;
   --color-surface: #ffffff;
-  --color-muted: #536176; /* 보조 텍스트 */
-  --color-border: #e5e7eb; /* 구분선 */
-  --color-subtle: #f5f7fb; /* 옅은 배경 */
-
-  --text-xs: 0.8125rem;
-  --text-sm: 0.9375rem;
-  --text-xl: 1.5rem;
-  --text-2xl: 1.875rem;
-
-  --font-sans:
-    "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
-    system-ui, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --color-muted: #687079;
+  --color-border: #e9ebef;
+  --color-subtle: #f5f6f8;
+  --text-xs: 0.78125rem;
+  --text-sm: 0.875rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.625rem;
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
-
-html {
+:root {
   color-scheme: light;
+  --optify-accent: #257956; --optify-deep: #176343; --optify-tint: #eaf4ee;
+  --moai-accent: #7355b1; --moai-deep: #63429f; --moai-tint: #f0ebf9;
+  --lectures-accent: #bd5718; --lectures-deep: #9f4310; --lectures-tint: #fff0e5;
+  --color-success-bg: #eaf4ee; --color-success-ink: #236345;
 }
-
-body {
-  background: var(--color-surface);
-  color: var(--color-ink);
-  font-family: var(--font-sans);
-  line-height: 1.65;
-  -webkit-font-smoothing: antialiased;
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --color-ink: #e8eaef;
+  --color-surface: #202328;
+  --color-muted: #a4abb4;
+  --color-border: #34383f;
+  --color-subtle: #17191d;
+  --color-on-accent: #14181b;
+  --optify-accent: #70c8a1; --optify-deep: #70c8a1; --optify-tint: #253b33;
+  --moai-accent: #b8a2ed; --moai-deep: #b8a2ed; --moai-tint: #342d45;
+  --lectures-accent: #e8aa78; --lectures-deep: #e8aa78; --lectures-tint: #403125;
+  --color-accent: var(--optify-accent); --color-accent-deep: var(--optify-deep); --color-tint: var(--optify-tint);
+  --color-success-bg: #253b33; --color-success-ink: #8cd4af;
+  --color-red-50: #3e2629; --color-red-100: #482b30; --color-red-200: #63383e; --color-red-300: #82515b;
+  --color-red-500: #ef8b96; --color-red-600: #f0a1a9; --color-red-700: #f4adb5; --color-red-800: #f8bac1;
+  --color-amber-50: #3b3021; --color-amber-100: #443724; --color-amber-200: #635033; --color-amber-300: #806740;
+  --color-amber-600: #dfb26d; --color-amber-700: #e8be7d; --color-amber-800: #ebc991; --color-amber-900: #f4d6a7;
+  --color-blue-50: #25344b; --color-blue-100: #2c3c55; --color-blue-200: #40587a; --color-blue-700: #a3bff0; --color-blue-900: #c0d3f4;
+  --color-emerald-50: #253b33; --color-emerald-100: #2a4339; --color-emerald-700: #8cd4af;
 }
+html[data-workspace="optify"], [data-workspace="optify"] { --color-accent:var(--optify-accent); --color-accent-deep:var(--optify-deep); --color-tint:var(--optify-tint); }
+html[data-workspace="moai"], [data-workspace="moai"] { --color-accent:var(--moai-accent); --color-accent-deep:var(--moai-deep); --color-tint:var(--moai-tint); }
+html[data-workspace="lectures"], [data-workspace="lectures"] { --color-accent:var(--lectures-accent); --color-accent-deep:var(--lectures-deep); --color-tint:var(--lectures-tint); }
+body { background:var(--color-surface); color:var(--color-ink); font-family:var(--font-sans); font-size:15px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+button, input, select, textarea { accent-color:var(--color-accent); }
+::selection { background:var(--color-tint); color:var(--color-accent-deep); }
+/* Existing utility buttons also use the correct foreground in both modes. */
+.bg-accent, .bg-accent-deep { color:var(--color-on-accent); }
+.prose {
+  --tw-prose-body:var(--color-ink); --tw-prose-headings:var(--color-ink); --tw-prose-lead:var(--color-muted);
+  --tw-prose-links:var(--color-accent-deep); --tw-prose-bold:var(--color-ink); --tw-prose-counters:var(--color-muted);
+  --tw-prose-bullets:var(--color-muted); --tw-prose-hr:var(--color-border); --tw-prose-quotes:var(--color-ink);
+  --tw-prose-quote-borders:var(--color-border); --tw-prose-captions:var(--color-muted); --tw-prose-code:var(--color-ink);
+  --tw-prose-pre-code:var(--color-ink); --tw-prose-pre-bg:var(--color-subtle); --tw-prose-th-borders:var(--color-border); --tw-prose-td-borders:var(--color-border);
+}
+.recharts-default-tooltip { background:var(--color-surface)!important; border-color:var(--color-border)!important; color:var(--color-ink)!important; }
+.recharts-cartesian-axis-tick-value { fill:var(--color-muted); }
+.recharts-cartesian-grid line { stroke:var(--color-border); }
+.rounded-xl.border.bg-surface { border-color:transparent; }
+html[data-theme="dark"] .bg-red-600 { color:#201518; }
+.fc { --fc-border-color:var(--color-border); --fc-page-bg-color:var(--color-surface); --fc-neutral-bg-color:var(--color-subtle); --fc-neutral-text-color:var(--color-muted); --fc-list-event-hover-bg-color:var(--color-tint); --fc-today-bg-color:var(--color-tint); --fc-button-bg-color:var(--color-accent-deep); --fc-button-border-color:var(--color-accent-deep); --fc-button-text-color:var(--color-on-accent); --fc-button-hover-bg-color:var(--color-accent); --fc-button-hover-border-color:var(--color-accent); --fc-button-active-bg-color:var(--color-accent-deep); --fc-button-active-border-color:var(--color-accent-deep); }
+@media(max-width:767px) { input:not([type=checkbox]):not([type=radio]), select, textarea { font-size:16px; } }

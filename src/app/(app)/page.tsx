@@ -240,7 +240,7 @@ export default async function TodayPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3 pb-1">
-        <div><h1 className="text-2xl font-bold tracking-tight">오늘</h1><p className="mt-2 text-sm text-muted">확인할 일부터 보고, 고객별 다음 행동을 이어가세요.</p></div>
+        <div><h1 className="text-2xl font-bold tracking-tight">오늘</h1></div>
         <time dateTime={today} className="pt-2 text-xs text-muted">{today.replaceAll("-", ". ")}</time>
       </div>
       {progress.warnings.length > 0 && <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{progress.warnings.map((warning) => <p key={warning}>{warning}</p>)}</div>}

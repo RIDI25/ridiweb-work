@@ -18,9 +18,9 @@ Tailwind v4 (CSS `@theme` 토큰, `tailwind.config` 파일 없음) · Supabase(A
 Anthropic(콘텐츠) · Gemini(이미지) · Google Ads/GSC/GA4 · `@react-pdf/renderer`(Puppeteer 금지) · `docx`(견적·계약 문서).
 
 ## 디자인 토큰 (globals.css `@theme`)
-옵티파이 트래커와 같은 화이트+블루(2026-09-06 전환). 악센트 블루 `--color-accent #2563EB`(버튼·포인트 전용, 넓은 면적 금지) ·
-보조 딥블루 `--color-accent-deep #1D4ED8` · 틴트 `--color-tint #EFF6FF` · 잉크 `--color-ink #111827` · 옅은 배경 `--color-subtle #F4F6FA`.
-화이트 모드 고정. 화면 컴포넌트에 색을 직접 박지 말고 토큰 클래스(`bg-accent`, `text-accent-deep`, `bg-tint`)를 쓴다.
+2026-11-01: 옵티파이 초록, 모아이 보라, 강의 주황. `data-workspace`로 악센트·딥·틴트를 전환하며 넓은 면적은 중립색을 유지한다.
+라이트/다크 지원. 첫 방문은 시스템 설정, 직접 선택은 `ridiweb.theme`에 저장한다. `data-theme`는 문서 루트에 적용하며 초기 스크립트로 첫 화면 번쩍임을 줄인다.
+본문 15px, 주요 제목 26px. 설명은 필요한 곳만, 카드는 면으로 구분하고 입력·표·구분선은 옅은 보더를 사용한다. 색은 토큰 클래스(`bg-accent`, `text-accent-deep`, `bg-tint`)로 지정하고 악센트 배경의 글씨는 `--color-on-accent`를 쓴다. 출력용 PDF 색상은 별도 유지한다.
 PDF 문서(`lib/export/*-pdf.tsx`)·카드뉴스·브랜드 설명(`lib/generation/business-context.ts`)의 네온 그린은 옵티파이 브랜드 자산이라 그대로 둔다.
 
 ## 보안 불변 규칙

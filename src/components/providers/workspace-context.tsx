@@ -15,6 +15,7 @@ export function WorkspaceProvider({children,restricted=false}:{children:ReactNod
  const previous=useSyncExternalStore(subscribe,snapshot,()=>"optify" as WorkspaceId);
  const routed=workspaceForPath(pathname);
  const workspace=restricted?"moai":routed||previous;
+ useEffect(()=>{document.documentElement.dataset.workspace=workspace;},[workspace]);
  useEffect(()=>{if(routed)remember(routed);},[routed]);
  return <RestrictedContext.Provider value={restricted}><WorkspaceContext.Provider value={workspace}>{children}</WorkspaceContext.Provider></RestrictedContext.Provider>;
 }

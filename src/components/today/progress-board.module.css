@@ -1,11 +1,11 @@
-.block { margin-bottom:24px; min-width:0; border:1px solid var(--color-border); border-radius:12px; background:var(--color-surface); }
+.block { margin-bottom:24px; min-width:0; border-radius:12px; background:var(--color-surface); }
 .sectionHead { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; padding:20px 22px; }
-.sectionHead h2 { display:flex; align-items:center; gap:9px; font-size:19px; font-weight:650; letter-spacing:-.3px; }
+.sectionHead h2 { display:flex; align-items:center; gap:9px; font-size:18px; font-weight:650; letter-spacing:-.3px; }
 .sectionHead>span,.sectionHead>a { color:var(--color-muted); font-size:13px; }
 .sectionHead>a:hover { color:var(--color-accent-deep); }
 .count { padding:2px 8px; border-radius:6px; color:var(--color-accent-deep); background:var(--color-tint); font-size:14px; }
 .reviewRow { display:grid; grid-template-columns:110px minmax(0,1fr) auto; align-items:center; gap:16px; padding:19px 22px; border-top:1px solid var(--color-border); }
-.reviewRow strong { font-size:16px; font-weight:650; line-height:1.6; overflow-wrap:anywhere; }
+.reviewRow strong { font-size:15px; font-weight:650; line-height:1.6; overflow-wrap:anywhere; }
 .clientLabel { font-size:14px; color:var(--color-muted); overflow-wrap:anywhere; }
 .secondary { font-size:13px; line-height:1.7; margin-top:6px; color:var(--color-muted); }
 .caption { margin-top:7px; font-size:13px; line-height:1.7; color:var(--color-muted); }
@@ -18,12 +18,12 @@
 .table th:last-child,.table td:last-child { padding-right:22px; }
 .table tr:last-child td { border-bottom:0; }
 .table tbody tr:hover { background:var(--color-tint); }
-.clientName { color:var(--color-accent-deep); font-weight:650; font-size:16px; }
+.clientName { color:var(--color-accent-deep); font-weight:650; font-size:15px; }
 .clientName:hover,.next:hover,.secondaryLink:hover { text-decoration:underline; text-underline-offset:3px; }
 .internal { font-size:12px; color:var(--color-muted); margin-left:8px; }
 .badge { display:inline-block; font-size:13px; font-weight:600; line-height:1.6; padding:3px 8px; border-radius:5px; margin-top:11px; background:var(--color-subtle); color:var(--color-muted); }
 .reviewBadge { background:var(--color-tint); color:var(--color-accent-deep); }
-.activeBadge { background:#eef5f1; color:#236345; }
+.activeBadge { background:var(--color-success-bg); color:var(--color-success-ink); }
 .next { display:block; font-weight:600; }
 .waiting { font-size:13px; color:var(--color-muted); margin-top:9px; }
 .secondaryLink { display:block; color:var(--color-accent-deep); font-size:13px; margin-top:6px; }
