@@ -12,5 +12,8 @@
       "path": "/api/reports/cron",
       "schedule": "30 15 * * *"
     }
+  ],
+  "regions": [
+    "hnd1"
   ]
 }

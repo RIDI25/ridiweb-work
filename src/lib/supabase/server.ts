@@ -1,9 +1,11 @@
+import { cache } from "react";
 import { createServerClient } from "@supabase/ssr";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 
 /** 서버 컴포넌트·라우트 핸들러·서버 액션용 Supabase 클라이언트 (사용자 세션) */
-export async function createClient() {
+// Share the cookie-bound client within one server render, never across requests.
+export const createClient = cache(async () => {
   const cookieStore = await cookies();
 
   return createServerClient(
@@ -26,7 +28,7 @@ export async function createClient() {
       },
     },
   );
-}
+});
 
 /**
  * 서버 전용 관리자 클라이언트 (service role).

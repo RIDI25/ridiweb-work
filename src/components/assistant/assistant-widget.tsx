@@ -63,9 +63,9 @@ export function AssistantWidget({ fullPage, visible, onClose }: { fullPage: bool
     catch (e) { setError((e as Error).message); }
     finally { setLoading(false); }
   }, [loadList, loadConversation]);
-  // Hydrate saved conversations from the external store once the shell mounts.
+  // Load history only when opened; keep this instance alive to preserve drafts.
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { void initialize(); }, [initialize]);
+  useEffect(() => { if (visible) void initialize(); }, [initialize, visible]);
   useEffect(() => {
     if (visible && page === 0 && log.current) log.current.scrollTop = log.current.scrollHeight;
   }, [messages, busy, pendingActions, page, visible, fullPage]);
@@ -75,12 +75,12 @@ export function AssistantWidget({ fullPage, visible, onClose }: { fullPage: bool
     return () => window.clearInterval(timer);
   }, [serverRunning, conversation, loadConversation]);
   useEffect(() => {
-    if (busy || resolving) return;
+    if (!visible || busy || resolving) return;
     const timer = window.setInterval(() => { void loadList().then(list => {
       if (active.current && (page === 0 || !list.some(c => c.id === active.current))) return loadConversation(active.current);
     }).catch(e => setError(e.message)); }, 60000);
     return () => window.clearInterval(timer);
-  }, [busy, resolving, page, loadList, loadConversation]);
+  }, [visible, busy, resolving, page, loadList, loadConversation]);
   async function choose(id: string) {
     if (busy || sending.current) return;
     if (input.trim() && !window.confirm("입력 중인 메시지를 비우고 다른 대화를 열까요?")) return;

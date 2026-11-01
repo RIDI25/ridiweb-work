@@ -36,5 +36,3 @@
 .switcher a[data-space=optify] {--tab-accent:var(--optify-accent);}
 .switcher a[data-space=moai] {--tab-accent:var(--moai-accent);}
 .switcher a[data-space=lectures] {--tab-accent:var(--lectures-accent);}
-.switcher a::before {content:"";width:5px;height:5px;flex-shrink:0;border-radius:50%;background:var(--tab-accent);}
-.switcher a[aria-current=true]::before {background:currentColor;}
