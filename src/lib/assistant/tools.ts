@@ -6,7 +6,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type Anthropic from "@anthropic-ai/sdk";
-import { lectureCalendar } from "@/lib/lectures/types";
+import { lectureCalendar, STAGES, ORIGINS } from "@/lib/lectures/types";
 import { noteExcerpt } from "@/lib/notes";
 import { READ_TOOLS, uuidValue } from "./action-types";
 import { resolvePerson, resolveCustomer } from "./prepare-action";
@@ -258,7 +258,7 @@ export async function executeAssistantTool(
         const id=uuidValue(input.id);
         if(input.type==="project") {
           const [p,d]=await Promise.all([supabase.from("lecture_projects").select("*").eq("id",id).eq("archived",false).maybeSingle(),supabase.from("lecture_documents").select("id,title,kind,status,version").eq("project_id",id).eq("archived",false).limit(50)]);
-          return p.error||d.error||!p.data?{ok:false,result:"강의를 찾지 못했어요."}:{ok:true,result:JSON.stringify({project:p.data,documents:d.data,href:`/lectures/${id}`})};
+          return p.error||d.error||!p.data?{ok:false,result:"강의를 찾지 못했어요."}:{ok:true,result:JSON.stringify({project:{...p.data,origin_label:ORIGINS[p.data.origin as keyof typeof ORIGINS],stage_label:STAGES[p.data.stage as keyof typeof STAGES]},documents:d.data,href:`/lectures/${id}`})};
         }
         if(input.type!=="document")return {ok:false,result:"조회할 자료 종류를 확인해 주세요."};
         const {data,error}=await supabase.from("lecture_documents").select("*").eq("id",id).eq("archived",false).maybeSingle();
