@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { WorkspaceHomeLink } from "./workspace-switcher";
 import { signOut } from "@/lib/actions/auth";
 import { MobileNav } from "./mobile-nav";
 import type { Role } from "@/types/database";
@@ -24,7 +25,7 @@ export function Topbar({ userName, role }: { userName: string; role: Role }) {
   return (
     <header className="flex h-14 items-center gap-3 border-b border-border bg-surface px-3">
       <MobileNav role={role} />
-      <Link href="/" aria-label="RIDIWEB 홈" className="text-[25px] font-bold leading-none tracking-[-1.2px]">RIDIWEB</Link>
+      <WorkspaceHomeLink className="text-[25px] font-bold leading-none tracking-[-1.2px]">RIDIWEB</WorkspaceHomeLink>
       <UserMenu userName={userName} />
     </header>
   );

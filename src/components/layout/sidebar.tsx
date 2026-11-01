@@ -3,9 +3,12 @@
 import Link from "next/link";
 import { Suspense, useId, useState, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { CONTENT_VIEWS, NAV_ITEMS, clientPath, getNavSection, parseClientPath, type ClientTab } from "@/lib/nav";
+import { CONTENT_VIEWS, clientPath, getNavSection, parseClientPath, type ClientTab } from "@/lib/nav";
 import { useClientContext } from "@/components/providers/client-context";
 import { CLIENT_KIND_LABEL, clientKind, type Role } from "@/types/database";
+import { workspaceNav } from "@/lib/workspaces";
+import { useWorkspace } from "@/components/providers/workspace-context";
+import { WorkspaceSwitcher, WorkspaceHomeLink } from "./workspace-switcher";
 import { NavIcon } from "./nav-icon";
 import styles from "./sidebar.module.css";
 
@@ -69,15 +72,17 @@ function ClientLinks({ search, onNavigate }: { search: boolean; onNavigate?: () 
 
 function NavListInner({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
-  const activeSection = getNavSection(pathname);
+  const workspace = useWorkspace();
+  const items = workspaceNav(workspace);
+  const activeSection = getNavSection(pathname, items);
   const [expanded, setExpanded] = useState<{ pathname: string; section: string | null } | null>(null);
   const openSection = expanded?.pathname === pathname ? expanded.section : activeSection;
   const navId = useId();
   const inClient = parseClientPath(pathname);
   const matches = (href: string) => pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
   return <nav aria-label="주 메뉴" className={styles.nav}>
-    {NAV_ITEMS.filter(item => !item.parent && !item.aux).map(item => {
-      const children = NAV_ITEMS.filter(child => child.parent === item.href);
+    {items.filter(item => !item.parent && !item.aux).map(item => {
+      const children = items.filter(child => child.parent === item.href);
       const hasChildren = children.length > 0;
       const open = hasChildren && openSection === item.href;
       const submenuId = `${navId}-${item.href.slice(1)}`;
@@ -97,7 +102,7 @@ function NavListInner({ onNavigate }: { onNavigate?: () => void }) {
         </div>}
       </div>;
     })}
-    <div className={styles.aux}>{NAV_ITEMS.filter(item => item.aux).map(item => <SubLink key={item.href} href={item.href} label={item.label} active={matches(item.href)} onNavigate={onNavigate} />)}</div>
+    <div className={styles.aux}>{items.filter(item => item.aux).map(item => <SubLink key={item.href} href={item.href} label={item.label} active={matches(item.href)} onNavigate={onNavigate} />)}</div>
   </nav>;
 }
 
@@ -108,10 +113,11 @@ export function NavList(props: { role?: Role; onNavigate?: () => void }) {
 export function Sidebar({ role, footer }: { role: Role; footer: ReactNode }) {
   return (
     <aside aria-label="워크스페이스 메뉴" className="flex h-full min-h-0 flex-col border-r border-border bg-surface">
-      <Link href="/" aria-label="RIDIWEB 홈" className="mx-6 mb-5 mt-7 block w-fit shrink-0 leading-none focus-visible:outline-2 focus-visible:outline-accent">
+      <WorkspaceHomeLink className="mx-6 mb-5 mt-7 block w-fit shrink-0 leading-none focus-visible:outline-2 focus-visible:outline-accent">
         <span className="block text-[31px] font-bold tracking-[-1.5px]">RIDIWEB</span>
         <span className="mt-2 block text-[11px] tracking-[.18em] text-muted">workspace</span>
-      </Link>
+      </WorkspaceHomeLink>
+      <WorkspaceSwitcher />
       <NavList role={role} />
       <div className="shrink-0 border-t border-border px-3 py-3">{footer}</div>
     </aside>

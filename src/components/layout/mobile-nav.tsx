@@ -2,6 +2,7 @@
 
 import { useRef } from "react";
 import { NavList } from "@/components/layout/sidebar";
+import { WorkspaceSwitcher } from "./workspace-switcher";
 import type { Role } from "@/types/database";
 
 /** The native dialog keeps keyboard focus inside the mobile navigation and supports Escape. */
@@ -18,6 +19,7 @@ export function MobileNav({ role }: { role: Role }) {
             <span className="text-[28px] font-bold tracking-[-1.4px]">RIDIWEB</span>
             <button onClick={() => dialog.current?.close()} aria-label="메뉴 닫기" className="grid size-10 place-items-center rounded-md text-xl text-muted hover:bg-subtle">×</button>
           </div>
+          <WorkspaceSwitcher onNavigate={() => dialog.current?.close()} />
           <NavList role={role} onNavigate={() => dialog.current?.close()} />
         </div>
       </dialog>

@@ -85,9 +85,9 @@ export const LEGACY_ROUTES: Record<string, { tab: ClientTab["key"]; view?: strin
 };
 
 /** A client URL has one primary section, even though its page keeps the client tabs. */
-export function getNavSection(pathname: string): string | null {
+export function getNavSection(pathname: string, items: NavItem[] = NAV_ITEMS): string | null {
   const client = parseClientPath(pathname);
   if (client) return ["seo", "geo", "reports"].includes(client.tab ?? "") ? "/seo-geo" : "/clients";
-  const item = NAV_ITEMS.find(entry => pathname === entry.href || (entry.href !== "/" && pathname.startsWith(`${entry.href}/`)));
+  const item = [...items].sort((a,b)=>b.href.length-a.href.length).find(entry => pathname === entry.href || (entry.href !== "/" && pathname.startsWith(`${entry.href}/`)));
   return item?.parent ?? item?.href ?? null;
 }
