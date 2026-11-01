@@ -17,6 +17,7 @@ async function api(url: string, init?: RequestInit) {
 }
 export function AssistantWidget({ fullPage, visible, onClose }: { fullPage: boolean; visible: boolean; onClose: () => void }) {
   const pathname = usePathname(); const router = useRouter(); const { clients } = useClientContext();
+  const lectureId = pathname.match(/^\/lectures\/([0-9a-f-]{36})$/)?.[1];
   const screenClientId = parseClientPath(pathname)?.clientId;
   const [target, setTarget] = useState("auto");
   const selectedId = target === "auto" ? screenClientId : target;
@@ -100,7 +101,7 @@ export function AssistantWidget({ fullPage, visible, onClose }: { fullPage: bool
   async function send(text = input) {
     text = text.trim(); if (!text || sending.current || busy || targetMissing || !ready) return;
     sending.current = true; setNetworkBusy(true); setError("");
-    const context = selected?.name || "전체 업무";
+    const context = target === "auto" && lectureId ? `강의 /lectures/${lectureId}` : selected?.name || "전체 업무";
     try {
       const current = conversation || await newConversation();
       setInput("");
@@ -140,7 +141,7 @@ export function AssistantWidget({ fullPage, visible, onClose }: { fullPage: bool
       <div className={styles.chatMain}>
         <div className={styles.threadToolbar}>
         <div className={styles.threadBar}><button className={styles.historyToggle} onClick={() => setShowHistory(v => !v)} aria-expanded={showHistory}>대화 목록</button><strong>{conversation?.title || "새로운 대화를 시작해요"}</strong>{conversation && <button disabled={loading} aria-pressed={conversation.pinned} onClick={() => void pin()}>{conversation.pinned ? "📌 고정됨" : "대화 고정"}</button>}<button disabled={networkBusy} aria-label="대화 새로고침" onClick={() => void initialize()}>↻</button></div>
-        <div className={styles.context}><label htmlFor="assistant-target">업무 대상</label><select id="assistant-target" value={target} onChange={e => setTarget(e.target.value)}><option value="auto">현재 화면 · {clients.find(c => c.id === screenClientId)?.name || (screenClientId ? "고객 확인 중" : "전체 업무")}</option><option value="all">전체 업무</option>{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+        <div className={styles.context}><label htmlFor="assistant-target">업무 대상</label><select id="assistant-target" value={target} onChange={e => setTarget(e.target.value)}><option value="auto">현재 화면 · {clients.find(c => c.id === screenClientId)?.name || (lectureId ? "현재 강의" : screenClientId ? "고객 확인 중" : "전체 업무")}</option><option value="all">전체 업무</option>{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
         </div>
         {error && <div role="alert" className={styles.actionError}>{error}<button disabled={networkBusy} onClick={() => void initialize()}>대화 다시 불러오기</button></div>}
         <div id="assistant-log" ref={log} className={styles.log} role="log" aria-label="비서와의 대화" aria-live="polite" aria-relevant="additions">

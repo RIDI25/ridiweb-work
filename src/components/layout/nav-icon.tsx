@@ -1,6 +1,7 @@
 import type { NavIconName } from "@/lib/nav";
 
 const paths: Record<NavIconName, React.ReactNode> = {
+  lecture: <><path d="M3 4h18v12H3zM12 16v5m-5 0 5-5 5 5M7 8h10M7 12h6" /></>,
   chat: <><path d="M20 11.5a8 8 0 0 1-8 8H4l-1 2v-10a8.5 8.5 0 0 1 17 0Z" /><path d="M8 10h7M8 14h4" /></>,
   calendar: <><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M7 3v4m10-4v4M3 11h18M7 15h2m6 0h2M7 18h2" /></>,
   notes: <><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M9 8h6m-6 4h6m-6 4h4" /></>,

@@ -20,12 +20,14 @@ export const eventTypeLabel = (key: string) =>
 
 /** 캘린더 소스별 칩 색 — 악센트 넓은 면적 금지 원칙에 따라 작은 칩에만 사용 */
 export const SOURCE_STYLES: Record<string, string> = {
+  lecture: "bg-tint text-accent-deep",
   event: "bg-tint text-accent-deep",
   task: "bg-blue-50 text-blue-700",
   invoice: "bg-amber-50 text-amber-700",
 };
 
 export const SOURCE_LABELS: Record<string, string> = {
+  lecture: "강의",
   event: "일정",
   task: "업무 마감",
   invoice: "세금계산서",

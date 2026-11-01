@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import type { lectureCalendar } from "@/lib/lectures/types";
 import { useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -31,7 +33,8 @@ function weekOf(anchor: Date): string[] {
 
 interface CalItem {
   key: string;
-  kind: "event" | "task" | "invoice";
+  kind: "event" | "task" | "invoice" | "lecture";
+  href?: string;
   date: string;
   time: string | null;
   label: string;
@@ -61,7 +64,10 @@ export function ScheduleView({
   invoices,
   clients,
   profiles,
+  lectures, lecturesError,
 }: {
+  lectures: ReturnType<typeof lectureCalendar>;
+  lecturesError: boolean;
   me: { id: string };
   today: string;
   initialEvents: CalendarEvent[];
@@ -76,6 +82,7 @@ export function ScheduleView({
   clients: { id: string; name: string }[];
   profiles: { id: string; name: string }[];
 }) {
+  const router = useRouter();
   const supabase = createClient();
   const [events, setEvents] = useState<CalendarEvent[]>(initialEvents);
   const [anchor, setAnchor] = useState<Date>(() => new Date(`${today}T12:00:00`));
@@ -147,12 +154,13 @@ export function ScheduleView({
         sub: "발행일",
       });
     }
+    for (const l of lectures) push({...l, kind: "lecture"});
     for (const list of map.values()) {
       list.sort((a, b) => (a.time ?? "99") < (b.time ?? "99") ? -1 : 1);
     }
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [events, tasks, invoices]);
+  }, [events, tasks, invoices, lectures]);
 
   async function refetch() {
     const { data } = await supabase.from("events").select("*").order("event_date");
@@ -250,11 +258,12 @@ export function ScheduleView({
 
   return (
     <div className="mx-auto max-w-6xl space-y-4">
+      {lecturesError && <p role="alert">강의 일정을 불러오지 못했어요. 새로고침 후 확인해 주세요.</p>}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-ink">캘린더</h1>
           <p className="mt-1 text-sm text-muted">
-            일정·업무 마감·세금계산서 발행일을 한 캘린더에서 봅니다.
+            강의·일정·업무 마감·세금계산서 발행일을 함께 봅니다.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -464,7 +473,8 @@ export function ScheduleView({
                               key={it.key}
                               onClick={(ev) => {
                                 ev.stopPropagation();
-                                if (it.event) openEdit(it.event);
+                                if (it.href) router.push(it.href);
+                                else if (it.event) openEdit(it.event);
                               }}
                               title={`${it.label}${it.sub ? ` (${it.sub})` : ""}`}
                               className={[
@@ -537,7 +547,7 @@ export function ScheduleView({
                           </button>
                         ) : (
                           <Link
-                            href={it.kind === "task" ? "/tasks" : "/revenue"}
+                            href={it.href || (it.kind === "task" ? "/tasks" : "/revenue")}
                             className="truncate text-ink hover:text-accent-deep hover:underline"
                           >
                             {it.label}

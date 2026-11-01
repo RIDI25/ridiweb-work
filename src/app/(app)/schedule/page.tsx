@@ -1,3 +1,4 @@
+import { lectureCalendar } from "@/lib/lectures/types";
 import { requireProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { ScheduleView } from "@/components/schedule/schedule-view";
@@ -10,7 +11,7 @@ export default async function SchedulePage() {
   const supabase = await createClient();
 
   // 세금계산서 발행일 — 조회는 팀 전체 (쓰기는 owner 전용, RLS 0023)
-  const [eventsRes, tasksRes, invoicesRes, clientsRes, profilesRes] =
+  const [eventsRes, tasksRes, invoicesRes, clientsRes, profilesRes, lecturesRes] =
     await Promise.all([
       supabase.from("events").select("*").order("event_date"),
       supabase
@@ -23,10 +24,13 @@ export default async function SchedulePage() {
         .neq("status", "cancelled"),
       supabase.from("clients").select("id, name"),
       supabase.from("profiles").select("id, name"),
+      supabase.from("lecture_projects").select("id,title,sessions,archived,stage,next_action,next_action_date").eq("archived",false),
     ]);
 
   return (
     <ScheduleView
+      lectures={lectureCalendar(lecturesRes.data || [])}
+      lecturesError={!!lecturesRes.error}
       me={{ id: profile.id }}
       today={kstToday()}
       initialEvents={(eventsRes.data ?? []) as CalendarEvent[]}

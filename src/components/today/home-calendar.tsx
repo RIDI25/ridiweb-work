@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { lectureCalendar } from "@/lib/lectures/types";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { DOW_KO, EVENT_TYPES, SOURCE_STYLES, buildMonthGrid, eventTypeLabel } from "@/lib/schedule";
@@ -29,7 +30,7 @@ export interface CalPlan {
 
 interface CalItem {
   key: string;
-  kind: "event" | "task" | "invoice" | "publish";
+  kind: "event" | "task" | "invoice" | "publish" | "lecture";
   date: string;
   time: string | null;
   label: string;
@@ -39,12 +40,13 @@ interface CalItem {
 }
 
 const KIND_STYLE: Record<CalItem["kind"], string> = {
+  lecture: SOURCE_STYLES.lecture,
   event: SOURCE_STYLES.event,
   task: SOURCE_STYLES.task,
   invoice: SOURCE_STYLES.invoice,
   publish: "bg-emerald-50 text-emerald-700",
 };
-const KIND_LABEL: Record<CalItem["kind"], string> = { event: "일정", task: "업무 마감", invoice: "세금계산서", publish: "발행 예정" };
+const KIND_LABEL: Record<CalItem["kind"], string> = { lecture: "강의", event: "일정", task: "업무 마감", invoice: "세금계산서", publish: "발행 예정" };
 
 const input = "rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-accent-deep";
 
@@ -61,7 +63,9 @@ export function HomeCalendar({
   plans,
   clients,
   profiles,
+  lectures,
 }: {
+  lectures: ReturnType<typeof lectureCalendar>;
   today: string;
   me: { id: string };
   initialEvents: CalendarEvent[];
@@ -86,6 +90,7 @@ export function HomeCalendar({
   const clientNameOf = (id: string | null) => (id ? (clients.find((c) => c.id === id)?.name ?? "") : "");
 
   const items: CalItem[] = [
+    ...lectures.map(l=>({...l,kind:"lecture" as const})),
     ...events.map((e) => ({
       key: `e-${e.id}`,
       kind: "event" as const,

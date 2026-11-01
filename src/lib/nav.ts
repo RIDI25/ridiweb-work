@@ -3,7 +3,7 @@
  * Search performance routes stay client-scoped and belong to the SEO/GEO section.
  * Legacy URLs remain available for existing links and bookmarks.
  */
-export type NavIconName = "chat" | "calendar" | "notes" | "clients" | "search" | "wallet";
+export type NavIconName = "chat" | "calendar" | "notes" | "clients" | "search" | "wallet" | "lecture";
 
 export interface NavItem {
   href: string;
@@ -22,6 +22,9 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "오늘 할 일", parent: "/schedule" },
   { href: "/tasks", label: "업무 보드", parent: "/schedule" },
   { href: "/meetings", label: "회의록", icon: "notes" },
+  { href: "/lectures", label: "강의", icon: "lecture" },
+  { href: "/lectures/library", label: "커리큘럼 · 기본 자료", parent: "/lectures" },
+  { href: "/lectures/profile", label: "강사 소개 · 이력", parent: "/lectures" },
   { href: "/clients", label: "고객/협력사", icon: "clients" },
   { href: "/sales", label: "영업 관리", parent: "/clients" },
   { href: "/quotes", label: "견적서 · 계약서", parent: "/clients" },

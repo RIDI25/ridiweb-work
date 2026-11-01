@@ -53,3 +53,8 @@ Settings → API에서 URL / anon key / service_role key를 복사해 `.env.loca
 - 홈택스 발행, 고객 발송, 계약 체결은 자동 수행하지 않는다.
 
 검증: `npm test` 및 `npm run build`. 데이터베이스 검증은 `supabase/tests/assistant-confirmation.mjs`를 사용한다. 테스트용 `@electric-sql/pglite`를 별도 임시 폴더에 설치한 뒤 `PGLITE_MODULE`을 그 모듈의 `dist/index.js` 절대 경로로 지정하여 Node로 실행한다. 테스트는 메모리 데이터베이스와 예시 데이터만 사용하며 실제 Supabase에 연결하지 않는다. 동시 연결 부하 테스트는 포함하지 않는다.
+
+
+## 0036 — 개인 강의 관리
+
+`migrations/0036_lectures.sql`을 코드 배포 전에 실행한다. 2026-11-01 ridiweb-work (`riblksexnoijlgruviqi`)에 SQL Editor로 적용 완료. 새 테이블 3개이며 기존 업무 테이블은 변경하지 않는다. 재실행 가능. 본인 RLS와 문서별 저장 이력·버전 잠금, 확정본 수정 시 초안 전환을 적용한다. `PGLITE_MODULE`을 지정한 `node supabase/tests/lectures.mjs`로 계정 격리·소유권/이력 위조 차단·확정본 보존을 검증한다. 초기 실제 강의 정보는 사용자 화면에서 작성하며 마이그레이션에 개인 데이터를 넣지 않는다.
