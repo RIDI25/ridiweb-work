@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { PartnerBadge } from "@/components/clients/partnership";
+import type { PartnerLink } from "@/lib/service-partners";
 import { recordDate, type ClientProgress, type ReviewItem, type WaitingItem } from "@/lib/workspace-progress";
 import styles from "./progress-board.module.css";
 
@@ -13,7 +15,7 @@ export function ReviewInbox({ reviews, unavailable = false }: { reviews: ReviewI
   </section>;
 }
 
-export function ClientProgressTable({ clients, title = true }: { clients: ClientProgress[]; title?: boolean }) {
+export function ClientProgressTable({ clients, title = true, partners = {} }: { clients: ClientProgress[]; title?: boolean; partners?: Record<string, PartnerLink[]> }) {
   return <section className={styles.block} aria-label="고객별 진행 현황">
     {title && <div className={styles.sectionHead}><h2>고객별 진행 현황</h2><Link href="/clients">전체 고객 보기 →</Link></div>}
     {clients.length ? <table className={styles.table}>
@@ -21,6 +23,7 @@ export function ClientProgressTable({ clients, title = true }: { clients: Client
       <thead><tr><th scope="col">고객 · 현재 단계</th><th scope="col">최근 기록</th><th scope="col">다음 행동</th></tr></thead>
       <tbody>{clients.map((client) => <tr key={client.id}>
         <td className={styles.clientCell}><Link href={`/clients/${client.id}/overview`} className={styles.clientName}>{client.name}</Link>{client.isInternal && <span className={styles.internal}>내부</span>}
+          <div className="mt-1 flex flex-wrap gap-1">{(partners[client.id] ?? []).map((partner) => <PartnerBadge key={partner.id} partner={partner} />)}</div>
           <p className={styles.secondary}>{client.services.length ? client.services.join(" · ") : "진행 계약 미등록"}</p>
           <span className={`${styles.badge} ${client.tone === "review" ? styles.reviewBadge : client.tone === "active" ? styles.activeBadge : ""}`}>{client.stage}</span>
           {client.clientStatus !== "active" && <p className={styles.caption}>고객 상태 · {client.clientStatus === "paused" ? "일시중지" : "종료"}</p>}

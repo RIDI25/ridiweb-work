@@ -18,6 +18,7 @@ export function ClientShell({ id, children }: { id: string; children: ReactNode 
   const pathname = usePathname();
   const tab = parseClientPath(pathname)?.tab ?? "overview";
   const client = clients.find((c) => c.id === id) ?? null;
+  const isPartner = client?.kind === "partner";
 
   useEffect(() => {
     if (!loading && client && selectedClientId !== id) setSelectedClientId(id);
@@ -57,7 +58,7 @@ export function ClientShell({ id, children }: { id: string; children: ReactNode 
       <div>
         <p className="font-mono text-xs text-muted">
           <Link href="/clients" className="hover:underline">
-            고객사
+            고객/협력사
           </Link>{" "}
           › {client?.name ?? "…"}
         </p>
@@ -83,7 +84,7 @@ export function ClientShell({ id, children }: { id: string; children: ReactNode 
               </span>
             );
           })}
-          {services.id === id && activeServices.length === 0 && (
+          {!isPartner && services.id === id && activeServices.length === 0 && (
             <Link href={clientPath(id, "info")} className="text-xs text-muted hover:text-accent-deep hover:underline">
               진행중 계약 없음 · 기본정보에서 등록
             </Link>
@@ -95,7 +96,7 @@ export function ClientShell({ id, children }: { id: string; children: ReactNode 
       </div>
 
       <div className="flex gap-1 overflow-x-auto border-b border-border">
-        {CLIENT_TABS.map((t) => (
+        {CLIENT_TABS.filter((t) => !isPartner || t.key === "overview" || t.key === "info").map((t) => (
           <Link
             key={t.key}
             href={clientPath(id, t.key)}
@@ -105,7 +106,7 @@ export function ClientShell({ id, children }: { id: string; children: ReactNode 
             ].join(" ")}
           >
             {t.icon ? `${t.icon} ` : ""}
-            {t.label}
+            {isPartner && t.key === "overview" ? "협업 건" : t.label}
           </Link>
         ))}
       </div>

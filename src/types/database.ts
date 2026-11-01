@@ -272,6 +272,12 @@ export type ServiceStatus = "active" | "done" | "paused" | "ended";
 
 /** 고객사 계약 서비스 — 업무 플로우 구분 기준. service_type은 lib/services.ts 레지스트리 키 */
 export interface ClientService extends Timestamps {
+  /** 0039: contract-specific collaboration; old records stay unclassified. */
+  deal_channel?: "direct" | "partner" | null;
+  partner_id?: string | null;
+  communication_contact?: string | null;
+  final_reviewer?: string | null;
+  settlement_party?: string | null;
   id: string;
   client_id: string;
   service_type: string;

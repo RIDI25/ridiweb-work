@@ -40,7 +40,7 @@ export function ClientInfo({ id }: { id: string }) {
     <div className="mx-auto max-w-5xl space-y-6">
       <section className="space-y-2">
         <h2 className="text-sm font-bold text-ink">계약 서비스</h2>
-        <p className="text-xs text-muted">항목을 더하고 기간·금액·상태를 그 자리에서 고칩니다. 끝난 계약은 지우지 말고 종료로 두면 이력이 남습니다.</p>
+
         <ClientServicesSection key={client.id} clientId={client.id} readOnly={false} />
       </section>
 

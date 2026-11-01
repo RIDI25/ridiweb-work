@@ -1,6 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useClientContext } from "@/components/providers/client-context";
+import { PartnershipFields, PartnershipSummary } from "@/components/clients/partnership";
+import { collaborationPatch, type CollaborationFields } from "@/lib/service-partners";
+import { saveServicePartnership, refreshServiceViews } from "@/lib/actions/service-partners";
 import { createClient } from "@/lib/supabase/client";
 import {
   SERVICES,
@@ -35,6 +39,11 @@ export function ClientServicesSection({
   clientId: string;
   readOnly: boolean;
 }) {
+  const { clients } = useClientContext();
+  const partners = clients.filter((c) => c.kind === "partner" && c.id !== clientId);
+  const [collaboration, setCollaboration] = useState<CollaborationFields>({ deal_channel: "direct" });
+  const [editing, setEditing] = useState<{ id: string; value: CollaborationFields } | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const [services, setServices] = useState<ClientService[]>([]);
   const [adding, setAdding] = useState(false);
   const [type, setType] = useState(SERVICES[0].key); // 항목명 — 추천 목록에 없어도 자유 입력
@@ -67,7 +76,11 @@ export function ClientServicesSection({
       .select("*")
       .eq("client_id", clientId)
       .order("created_at", { ascending: true })
-      .then(({ data }) => setServices((data ?? []) as ClientService[]));
+      .then(({ data, error }) => {
+        setLoaded(true);
+        if (error) { setMsg("계약을 불러오지 못했습니다. 새로고침해 주세요."); return; }
+        setServices((data ?? []) as ClientService[]);
+      });
   }, [clientId]);
 
   useEffect(reload, [reload]);
@@ -78,9 +91,13 @@ export function ClientServicesSection({
       setMsg("계약 항목명을 적으세요.");
       return;
     }
+    let partnership: CollaborationFields;
+    try { partnership = collaborationPatch(collaboration); }
+    catch (error) { setMsg(error instanceof Error ? error.message : "거래 정보를 확인해 주세요."); return; }
     setBusy(true);
     setMsg("");
     const row: Record<string, unknown> = {
+      ...partnership,
       client_id: clientId,
       service_type: name,
       billing,
@@ -103,15 +120,28 @@ export function ClientServicesSection({
     setMonthlyFee("");
     setQuota("");
     setMemo("");
+    setCollaboration({ deal_channel: "direct" });
+    await refreshServiceViews();
     reload();
   }
 
+  async function savePartnership() {
+    if (!editing) return;
+    setBusy(true); setMsg("");
+    try {
+      const result = await saveServicePartnership(editing.id, editing.value);
+      if (!result.ok) { setMsg(result.error ?? "저장하지 못했습니다."); return; }
+      setEditing(null); reload();
+    } catch { setMsg("저장하지 못했습니다. 다시 시도해 주세요."); }
+    finally { setBusy(false); }
+  }
+
   async function updateStatus(svc: ClientService, status: ServiceStatus) {
-    await createClient()
-      .from("client_services")
-      .update({ status, updated_at: new Date().toISOString() })
-      .eq("id", svc.id);
-    reload();
+    setBusy(true); setMsg("");
+    const { error } = await createClient().from("client_services").update({ status, updated_at: new Date().toISOString() }).eq("id", svc.id).select("id").single();
+    setBusy(false);
+    if (error) { setMsg("상태를 변경하지 못했습니다."); return; }
+    await refreshServiceViews(); reload();
   }
 
   async function renew(svc: ClientService) {
@@ -127,41 +157,34 @@ export function ClientServicesSection({
       : today();
     if (!window.confirm(`${serviceLabel(svc.service_type)} 계약을 ${nextStart}부터 ${months}개월 연장할까요?`))
       return;
-    const supabase = createClient();
-    await supabase
-      .from("client_services")
-      .update({ status: "ended", updated_at: new Date().toISOString() })
-      .eq("id", svc.id);
-    await supabase.from("client_services").insert({
-      client_id: clientId,
-      service_type: svc.service_type,
-      billing: svc.billing,
-      status: "active",
-      start_date: nextStart,
-      end_date: addMonths(nextStart, months),
-      monthly_fee: svc.monthly_fee,
-      memo: "재계약",
-    });
-    reload();
+    setBusy(true); setMsg("");
+    const { error } = await createClient().rpc("renew_client_service", { service_id: svc.id, new_start: nextStart, new_end: addMonths(nextStart, months) });
+    setBusy(false);
+    if (error) { setMsg("재계약하지 못했습니다. 기존 계약은 유지됩니다."); return; }
+    await refreshServiceViews(); reload();
   }
 
   async function remove(svc: ClientService) {
     if (!window.confirm(`'${serviceLabel(svc.service_type)}' 계약을 삭제할까요?`)) return;
-    await createClient().from("client_services").delete().eq("id", svc.id);
-    reload();
+    setBusy(true); setMsg("");
+    const { error } = await createClient().from("client_services").delete().eq("id", svc.id).select("id").single();
+    setBusy(false);
+    if (error) { setMsg("계약을 삭제하지 못했습니다."); return; }
+    await refreshServiceViews(); reload();
   }
 
   return (
     <div className="space-y-3 rounded-lg border border-border bg-surface p-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted">
-          이 고객사가 계약한 항목입니다. 콘텐츠 화면·대시보드가 이 기준으로 표시됩니다.
+          계약별 진행 상태와 거래 정보
         </p>
         <div className="flex items-center gap-2">
-          {msg && <span className="text-xs text-red-500">{msg}</span>}
+
           {!readOnly && (
             <button
-              onClick={() => setAdding((v) => !v)}
+              disabled={busy}
+              onClick={() => { setAdding((v) => !v); setEditing(null); setMsg(""); }}
               className="rounded-md border border-accent-deep px-3 py-1.5 text-sm font-medium text-accent-deep hover:bg-tint"
             >
               {adding ? "닫기" : "+ 계약 추가"}
@@ -170,11 +193,12 @@ export function ClientServicesSection({
         </div>
       </div>
 
+      {msg && <p role="alert" className="text-sm text-red-600">{msg}</p>}
       {adding && (
         <div className="space-y-3 rounded-md bg-subtle p-3">
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
             <label className="space-y-1">
-              <span className="text-xs font-medium text-muted">계약 항목 (자유 입력 · 추천 목록은 참고)</span>
+              <span className="text-xs font-medium text-muted">계약 항목</span>
               <input
                 list="service-suggestions"
                 value={type}
@@ -228,6 +252,7 @@ export function ClientServicesSection({
               </label>
             )}
           </div>
+          <PartnershipFields value={collaboration} onChange={setCollaboration} partners={partners} />
           <div className="flex items-center gap-2">
             <input
               value={memo}
@@ -246,7 +271,7 @@ export function ClientServicesSection({
         </div>
       )}
 
-      {services.length === 0 ? (
+      {!loaded ? <p className="text-sm text-muted">불러오는 중…</p> : services.length === 0 ? (
         <p className="rounded-md border border-dashed border-border py-5 text-center text-sm text-muted">
           등록된 계약 서비스가 없습니다.
         </p>
@@ -259,9 +284,10 @@ export function ClientServicesSection({
             return (
               <div
                 key={svc.id}
+                id={`service-${svc.id}`}
                 className={[
-                  "flex flex-wrap items-center justify-between gap-2 rounded-md border p-3",
-                  expiring ? "border-amber-300 bg-amber-50" : "border-border",
+                  "scroll-mt-6 flex flex-wrap items-center justify-between gap-2 rounded-md p-3",
+                  expiring ? "bg-subtle" : "bg-surface",
                 ].join(" ")}
               >
                 <div className="min-w-0">
@@ -291,10 +317,13 @@ export function ClientServicesSection({
                     )}
                     {svc.memo && ` · ${svc.memo}`}
                   </p>
+                  <PartnershipSummary value={svc} partners={partners} />
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {!readOnly && <button disabled={busy} onClick={() => { setEditing({ id: svc.id, value: { ...svc } }); setAdding(false); setMsg(""); }} className="rounded px-2 py-1 text-xs text-accent-deep hover:bg-tint">거래 정보 수정</button>}
                   {!readOnly && svc.billing === "period" && svc.status === "active" && (
                     <button
+                      disabled={busy}
                       onClick={() => renew(svc)}
                       className="rounded border border-accent-deep px-2 py-1 text-xs font-medium text-accent-deep hover:bg-tint"
                     >
@@ -304,7 +333,8 @@ export function ClientServicesSection({
                   <select
                     value={svc.status}
                     onChange={(e) => updateStatus(svc, e.target.value as ServiceStatus)}
-                    disabled={readOnly}
+                    aria-label={`${serviceLabel(svc.service_type)} 상태`}
+                    disabled={readOnly || busy}
                     className="rounded-md border border-border bg-surface px-2 py-1 text-xs outline-none focus:border-accent-deep disabled:bg-subtle"
                   >
                     {Object.entries(SERVICE_STATUS_LABELS).map(([value, label]) => (
@@ -315,6 +345,7 @@ export function ClientServicesSection({
                   </select>
                   {!readOnly && (
                     <button
+                      disabled={busy}
                       onClick={() => remove(svc)}
                       className="rounded border border-border px-2 py-1 text-xs text-muted hover:text-red-500"
                     >
@@ -322,6 +353,10 @@ export function ClientServicesSection({
                     </button>
                   )}
                 </div>
+                {editing?.id === svc.id && <div className="w-full space-y-3 rounded-md bg-subtle p-3">
+                  <PartnershipFields value={editing.value} onChange={(value) => setEditing({ id: svc.id, value })} partners={partners} />
+                  <div className="flex justify-end gap-2"><button disabled={busy} onClick={() => setEditing(null)} className="rounded px-3 py-1.5 text-sm text-muted">취소</button><button disabled={busy} onClick={savePartnership} className="rounded bg-accent px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-50">{busy ? "저장 중…" : "저장"}</button></div>
+                </div>}
               </div>
             );
           })}

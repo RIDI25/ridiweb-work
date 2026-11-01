@@ -10,6 +10,9 @@ import { getService } from "@/lib/services";
 import { channelLabel } from "@/lib/channels";
 import { kstMonth, monthBoundsUtc, monthContentSummary, type PublishRow } from "@/lib/publish-stats";
 import { metricLabel, surfaceLabel, formatValue } from "@/lib/tracker";
+import { PartnerOverview } from "./partner-overview";
+import { PartnershipSummary } from "./partnership";
+import { clientKind } from "@/types/database";
 import type { ClientService } from "@/types/database";
 
 type ContentRow = PublishRow & { id: string; title: string | null; approval_status: string; created_by: string | null };
@@ -34,6 +37,12 @@ function todayKst(): string {
 
 /** 고객사 개요 — 다음으로 할 일, 이번 달 콘텐츠, 계약, 최근 성과, 리포트, 메모 */
 export function ClientOverview({ id }: { id: string }) {
+  const { clients, loading } = useClientContext();
+  if (loading) return <p className="text-sm text-muted">불러오는 중…</p>;
+  return clientKind(clients.find((c) => c.id === id) ?? {}) === "partner" ? <PartnerOverview key={id} id={id} /> : <CustomerOverview key={id} id={id} />;
+}
+
+function CustomerOverview({ id }: { id: string }) {
   const { clients } = useClientContext();
   const client = clients.find((c) => c.id === id) ?? null;
   const [data, setData] = useState<{ id: string; loaded: Loaded } | null>(null);
@@ -202,6 +211,7 @@ export function ClientOverview({ id }: { id: string }) {
                       {s.monthly_fee ? ` · 월 ${Number(s.monthly_fee).toLocaleString("ko-KR")}원` : s.amount ? ` · ${Number(s.amount).toLocaleString("ko-KR")}원` : ""}
                       {s.status === "active" && dLeft != null && dLeft <= 30 && <span className="ml-1 font-medium text-amber-700">종료 D-{dLeft}</span>}
                     </dd>
+                    <dd><PartnershipSummary value={s} partners={clients} /></dd>
                   </div>
                 );
               })}

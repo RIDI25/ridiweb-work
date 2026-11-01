@@ -4,5 +4,5 @@ import { loadWorkspaceProgress } from "@/lib/workspace-data";
 
 export default async function ClientsPage() {
   const data = await loadWorkspaceProgress(await createClient());
-  return <ClientsIndex progress={data.clients} warnings={data.warnings} />;
+  return <ClientsIndex progress={data.clients} warnings={data.warnings} services={data.serviceRelations} />;
 }

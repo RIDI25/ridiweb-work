@@ -32,7 +32,7 @@ export async function saveClient(
   const supabase = await createClient();
   if (id) {
     const { error } = await supabase.from("clients").update(patch).eq("id", id);
-    return error ? { ok: false, error: error.message } : { ok: true };
+    return error ? { ok: false, error: error.message.includes("service_partner_kind_fk") ? "연결된 협업 계약이 있어 협력사 구분을 변경할 수 없습니다. 계약 연결을 먼저 수정해 주세요." : error.message } : { ok: true };
   }
   const {
     data: { user },
@@ -79,6 +79,10 @@ export async function deleteClient(
   if (target.is_internal) {
     return { ok: false, error: "내부 클라이언트(옵티파이)는 삭제할 수 없습니다." };
   }
+
+  const { count: linkedContracts, error: linkedError } = await supabase.from("client_services").select("id", { count: "exact", head: true }).eq("partner_id", id);
+  if (linkedError) return { ok: false, error: "협업 계약 연결을 확인하지 못했습니다. 다시 시도해 주세요." };
+  if (linkedContracts) return { ok: false, error: "연결된 협업 계약이 있어 삭제할 수 없습니다. 계약 연결을 먼저 수정해 주세요." };
 
   const admin = createAdminClient();
   const { error: detachErr } = await admin
