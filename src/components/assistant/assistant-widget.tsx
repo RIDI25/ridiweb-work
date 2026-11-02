@@ -1,4 +1,6 @@
 "use client";
+import { ATTACHMENT_ACCEPT, type ChatAttachment } from "@/lib/assistant/attachments";
+import { useAttachments, DraftAttachments, SavedAttachments } from "./attachments";
 import { AssistantText } from "./assistant-text";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -11,7 +13,7 @@ import { ActionCard } from "./action-card";
 import type { PendingAction } from "@/lib/assistant/action-types";
 import styles from "./assistant-widget.module.css";
 
-interface ChatMessage { id: string; role: "user" | "assistant"; content: string; context: string; created_at: string; metadata?: { actions?: { name: string; ok: boolean; summary: string }[] } }
+interface ChatMessage { id: string; role: "user" | "assistant"; content: string; context: string; created_at: string; metadata?: { attachments?: ChatAttachment[]; actions?: { name: string; ok: boolean; summary: string }[] } }
 interface Conversation { id: string; title: string; pinned: boolean; updated_at: string; active_turn_id: string | null; archived_at?: string | null }
 interface Archive { week_start: string; status: string; saved_at: string | null; error: string | null; summary_path: string | null }
 async function api(url: string, init?: RequestInit) {
@@ -38,6 +40,9 @@ export function AssistantWidget({ fullPage, visible, onClose }: { fullPage: bool
   const [loading, setLoading] = useState(true);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
+  const attachment = useAttachments(setError);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
   const [archive, setArchive] = useState<Archive | null>(null);
   const [connected, setConnected] = useState(false);
   const [more, setMore] = useState(false);
@@ -93,8 +98,8 @@ export function AssistantWidget({ fullPage, visible, onClose }: { fullPage: bool
   }, [initialize, visible]);
   async function choose(id: string) {
     if (busy || sending.current) return;
-    if (input.trim() && !window.confirm("입력 중인 메시지를 비우고 다른 대화를 열까요?")) return;
-    active.current = id; setLoading(true); setError(""); setInput(""); setShowHistory(false);
+    if ((input.trim() || attachment.files.length) && !window.confirm("입력 중인 메시지를 비우고 다른 대화를 열까요?")) return;
+    active.current = id; setLoading(true); setError(""); setInput(""); attachment.clear(); setShowHistory(false);
     try { await loadConversation(id); } catch (e) { setError((e as Error).message); } finally { setLoading(false); }
   }
   async function newConversation() {
@@ -103,8 +108,8 @@ export function AssistantWidget({ fullPage, visible, onClose }: { fullPage: bool
   }
   async function startNew() {
     if (busy || sending.current) return;
-    if (input.trim() && !window.confirm("입력 중인 메시지를 비우고 새 대화를 시작할까요?")) return;
-    setLoading(true); setError(""); setInput(""); setShowHistory(false);
+    if ((input.trim() || attachment.files.length) && !window.confirm("입력 중인 메시지를 비우고 새 대화를 시작할까요?")) return;
+    setLoading(true); setError(""); setInput(""); attachment.clear(); setShowHistory(false);
     try { await newConversation(); } catch (e) { setError((e as Error).message); } finally { setLoading(false); }
   }
   async function pin() {
@@ -113,21 +118,28 @@ export function AssistantWidget({ fullPage, visible, onClose }: { fullPage: bool
     catch (e) { setError((e as Error).message); }
   }
   async function send(text = input) {
-    text = text.trim(); if (!text || sending.current || busy || targetMissing || !ready) return;
+    text = text.trim(); if ((!text && !attachment.files.length) || sending.current || busy || targetMissing || !ready) return;
     sending.current = true; setNetworkBusy(true); setError("");
     const context = target === "auto" && moaiId ? `모아이 /moai/${moaiId}` : target === "auto" && lectureId ? `강의 /lectures/${lectureId}` : selected?.name || (target === "auto" ? screenArea : "전체 업무");
+    const requestId = crypto.randomUUID();
+    let submitted = false;
     try {
       const current = conversation || await newConversation();
-      setInput("");
-      const requestId = crypto.randomUUID();
-      setMessages(previous => [...previous, { id: requestId, role: "user", content: text, context, created_at: new Date().toISOString() }]);
-      const response = await fetch("/api/assistant", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ conversationId: current.id, requestId, message: text, context }) });
+      const attachmentIds = await attachment.upload(current.id);
+      submitted = true;
+      const response = await fetch("/api/assistant", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ conversationId: current.id, requestId, message: text, context, attachmentIds }) });
       const data = await response.json();
-      if (!response.ok && !data.pending) { setError(data.error || "요청 결과를 확인하지 못했어요."); setInput(text); }
-      await loadConversation(current.id); await loadList();
-    } catch {
-      setError("연결이 끊겼어요. 대화를 다시 불러와 저장 여부를 확인해 주세요.");
-      if (active.current) await loadConversation(active.current).catch(() => undefined);
+      if (!response.ok && !data.pending) setError(data.error || "요청 결과를 확인하지 못했어요.");
+      const saved = await loadConversation(current.id);
+      if (saved?.messages?.some((message: ChatMessage) => message.id === requestId)) { setInput(""); attachment.clear(); }
+      await loadList();
+    } catch (e) {
+      setError(submitted ? "연결이 끊겼어요. 저장 여부를 확인하고 있어요." : (e as Error).message);
+      if (submitted && active.current) {
+        const saved = await loadConversation(active.current).catch(() => undefined);
+        if (saved?.messages?.some((message: ChatMessage) => message.id === requestId)) { setInput(""); attachment.clear(); }
+        else setError("연결을 확인한 뒤 대화를 다시 불러와 주세요. 입력과 첨부파일은 남겨두었어요.");
+      }
     } finally { sending.current = false; setNetworkBusy(false); }
   }
   async function resolveAction(action: PendingAction, decision: "confirm" | "cancel" | "edit") {
@@ -161,12 +173,22 @@ export function AssistantWidget({ fullPage, visible, onClose }: { fullPage: bool
         <div id="assistant-log" ref={log} className={styles.log} role="log" aria-label="비서와의 대화" aria-live="polite" aria-relevant="additions">
           {more && <button className={styles.older} disabled={busy} onClick={() => { if (conversation) void loadConversation(conversation.id, page + 1).catch(e => setError(e.message)); }}>이전 메시지 더 보기</button>}
           {!messages.length && !loading && <div className={styles.welcome}><span aria-hidden>✦</span><strong>어떤 일을 할까요?</strong><div className={styles.suggestions}><button disabled={busy || targetMissing} onClick={() => void send("오늘 확인할 업무를 알려줘")}>오늘 할 일</button><button onClick={() => setInput(restricted ? "모아이 모임 기획을 같이 잡아보자. 현재 준비 상황부터 확인해줘." : "제안서 구성을 같이 잡아보자. 목표와 현재 상황부터 확인해줘.")}>{restricted ? "모임 기획" : "제안서 기획"}</button>{!restricted&&<button onClick={() => setInput("옵시디언의 최근 기획을 찾아보고, 결정한 내용과 다음에 정할 일을 정리해줘.")}>옵시디언 검색</button>}</div></div>}
-          {messages.map(message => <article key={message.id} className={`${styles.message} ${message.role === "user" ? styles.user : ""}`}><div className={styles.messageLabel}>{message.role === "user" ? "나" : "RIDIWEB 비서"}<span>{message.role === "user" ? (message.context.startsWith("강의 /lectures/") ? "강의" : message.context.startsWith("모아이 /moai/") ? "모아이" : message.context) : ""}</span><time>{new Date(message.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time></div><p>{message.role === "assistant" ? <AssistantText text={message.content}/> : message.content}</p>{!!message.metadata?.actions?.length && <ul className={styles.actions}>{message.metadata.actions.map((action,i) => <li key={i}><span>{action.ok ? (action.name === "delegate_specialist" ? "실무" : "조회") : "확인 필요"}</span> {action.summary}</li>)}</ul>}</article>)}
+          {messages.map(message => <article key={message.id} className={`${styles.message} ${message.role === "user" ? styles.user : ""}`}><div className={styles.messageLabel}>{message.role === "user" ? "나" : "RIDIWEB 비서"}<span>{message.role === "user" ? (message.context.startsWith("강의 /lectures/") ? "강의" : message.context.startsWith("모아이 /moai/") ? "모아이" : message.context) : ""}</span><time>{new Date(message.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time></div><SavedAttachments files={message.metadata?.attachments}/><p>{message.role === "assistant" ? <AssistantText text={message.content}/> : message.content}</p>{!!message.metadata?.actions?.length && <ul className={styles.actions}>{message.metadata.actions.map((action,i) => <li key={i}><span>{action.ok ? (action.name === "delegate_specialist" ? "실무" : "조회") : "확인 필요"}</span> {action.summary}</li>)}</ul>}</article>)}
           {pendingActions.filter(a => a.status === "pending").map(a => <ActionCard key={a.id} action={a} busy={resolving} onResolve={resolveAction} />)}
           {pendingActions.some(a => a.status !== "pending") && <details className={styles.actionHistory}><summary>이 대화의 처리 기록</summary>{pendingActions.filter(a => a.status !== "pending").slice(-10).reverse().map(a => <ActionCard key={a.id} action={a} busy={resolving} onResolve={resolveAction} />)}</details>}
-          {(busy || resolving) && <p className={styles.pending} role="status">{loading ? "저장된 대화를 불러오고 있어요…" : resolving ? "확인한 내용을 처리하고 있어요…" : "요청을 저장하고 답변을 준비하고 있어요…"}</p>}
+          {(busy || resolving) && <p className={styles.pending} role="status">{loading ? "저장된 대화를 불러오고 있어요…" : resolving ? "확인한 내용을 처리하고 있어요…" : attachment.progress || "요청을 저장하고 답변을 준비하고 있어요…"}</p>}
         </div>
-        <form className={styles.form} onSubmit={e => { e.preventDefault(); void send(); }}><label htmlFor="assistant-input">비서에게 바로 요청하기</label><div className={styles.inputRow}><textarea id="assistant-input" value={input} maxLength={8000} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && window.matchMedia("(min-width: 768px) and (hover: hover) and (pointer: fine)").matches) { e.preventDefault(); void send(); } }} rows={2} placeholder="비서에게 요청하기" /><button type="submit" disabled={busy || targetMissing || !input.trim() || !ready}>보내기</button></div><p className={styles.compose}>자동 저장<span className={styles.desktopHint}> · Enter 전송 · Shift+Enter 줄바꿈</span><span className={styles.mobileHint}> · 보내기 버튼으로 전송</span></p></form>
+        <form className={`${styles.form} ${dragging ? styles.dragging : ""}`} onDragOver={e => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); if (!busy) setDragging(true); } }} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragging(false); }} onDrop={e => { e.preventDefault(); setDragging(false); if (!busy) attachment.add(Array.from(e.dataTransfer.files)); }} onSubmit={e => { e.preventDefault(); void send(); }}>
+          <label htmlFor="assistant-input">비서에게 바로 요청하기</label>
+          <input ref={fileInput} type="file" hidden multiple accept={ATTACHMENT_ACCEPT} aria-label="이미지 및 파일 선택" onChange={e => { attachment.add(Array.from(e.target.files || [])); e.target.value = ""; }} />
+          <DraftAttachments files={attachment.files} disabled={busy} remove={attachment.remove}/>
+          <div className={styles.inputRow}>
+            <button className={styles.attachButton} type="button" disabled={busy || !ready} onClick={() => fileInput.current?.click()} aria-label="이미지 및 파일 첨부" title="파일 첨부 · 이미지 붙여넣기 가능"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden><path d="m8 13 7-7a3 3 0 0 1 4 4l-9 9a5 5 0 0 1-7-7l9-9a2 2 0 0 1 3 3l-8 8a1 1 0 0 0 2 2l7-7"/></svg></button>
+            <textarea id="assistant-input" value={input} disabled={networkBusy} maxLength={8000} onChange={e => setInput(e.target.value)} onPaste={e => { const files = Array.from(e.clipboardData.files); if (files.length) { e.preventDefault(); if (!busy) attachment.add(files); } }} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && window.matchMedia("(min-width: 768px) and (hover: hover) and (pointer: fine)").matches) { e.preventDefault(); void send(); } }} rows={2} placeholder={dragging ? "파일을 여기에 놓으세요" : "비서에게 요청하기"} />
+            <button type="submit" disabled={busy || targetMissing || (!input.trim() && !attachment.files.length) || !ready}>보내기</button>
+          </div>
+          <p className={styles.compose}>{attachment.files.length ? `${attachment.files.length}/5개 · 이미지 5MB · 파일 10MB · 합계 20MB` : "자동 저장"}<span className={styles.desktopHint}> · Enter 전송 · Shift+Enter 줄바꿈</span><span className={styles.mobileHint}> · 보내기 버튼으로 전송</span></p>
+        </form>
       </div>
     </div>
   </section>;

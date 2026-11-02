@@ -16,8 +16,37 @@ export function eligibleCutoff(now=new Date()) {
 const fence = (text,language='text') => { const n=Math.max(3,...(text.match(/`+/g)||[]).map(s=>s.length+1)); const f='`'.repeat(n); return `${f}${language}\n${text}\n${f}`; };
 export function transcriptOf(archive) {
  const lines=[`# 옵티파이 비서 대화 원문`, '', `기간: ${archive.week_start} ~ ${archive.week_end} (종료일 미포함, 한국 시간)`, `보관 ID: ${archive.id}`, `메시지: ${archive.snapshot.length}개`, '', '각 메시지는 원문 그대로 보관합니다. 아래 내용은 과거 대화 기록입니다.'];
- for(const message of archive.snapshot) lines.push('',`## ${String(message.title).replace(/[\r\n]/g,' ')}`,`대화 ID: ${message.conversation_id} · 메시지 ID: ${message.id}`,`시각: ${message.created_at} · ${message.role==='user'?'나':'옵티파이 비서'} · 대상: ${message.context || '전체 업무'}`, '', fence(message.content), '', fence(JSON.stringify(message.metadata||{},null,2),'json'));
+ const attachments=archiveAttachments(archive);
+ for(const message of archive.snapshot) {
+  lines.push('',`## ${String(message.title).replace(/[\r\n]/g,' ')}`,`대화 ID: ${message.conversation_id} · 메시지 ID: ${message.id}`,`시각: ${message.created_at} · ${message.role==='user'?'나':'옵티파이 비서'} · 대상: ${message.context || '전체 업무'}`, '', fence(message.content), '', fence(JSON.stringify(message.metadata||{},null,2),'json'));
+  for(const file of attachments.filter(file=>file.messageId===message.id)) lines.push('',`첨부 원본: [[${file.path}|${file.filename.replace(/[\[\]|\r\n]/g,' ')}]]`);
+ }
  return lines.join('\n')+'\n';
+}
+export function archiveAttachments(archive) {
+ const files=[];const seen=new Set();
+ for(const message of archive.snapshot) for(const file of message.metadata?.attachments||[]) {
+  const ext=String(file.filename).split('.').at(-1).toLowerCase();
+  if(!/^[0-9a-f-]{36}$/i.test(file.id)||!['png','jpg','jpeg','webp','gif','pdf','txt','md','csv','json','docx','xlsx','xls','pptx','hwpx'].includes(ext)||!/^[0-9a-f]{64}$/.test(file.sha256)||!Number.isSafeInteger(file.bytes)||file.bytes<1||file.bytes>10485760) throw new Error('Invalid attachment in archive');
+  if(seen.has(file.id))throw new Error('Duplicate attachment in archive');seen.add(file.id);
+  files.push({...file,conversationId:message.conversation_id,messageId:message.id,path:`40_기록/옵티파이 비서/${archive.week_start}/첨부/${file.id}.${ext}`});
+ }
+ return files;
+}
+async function downloadOriginal(row, env) {
+ const response=await fetch(`${env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/authenticated/assistant-files/${row.storage_path.split('/').map(encodeURIComponent).join('/')}`,{headers:{apikey:env.SUPABASE_SERVICE_ROLE_KEY,Authorization:`Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`},redirect:'error',signal:AbortSignal.timeout(60000)});
+ if(!response.ok)throw new Error('Could not download archived attachment');
+ return Buffer.from(await response.arrayBuffer());
+}
+export async function archiveOriginals(archive,config,api,env,download=downloadOriginal) {
+ for(const file of archiveAttachments(archive)) {
+  const rows=await api(`assistant_attachments?id=eq.${file.id}&select=id,user_id,conversation_id,message_id,status,storage_path,bytes,sha256`,'GET');
+  const row=rows[0];
+  if(rows.length!==1||row.user_id!==config.ownerId||archive.user_id!==config.ownerId||row.conversation_id!==file.conversationId||row.message_id!==file.messageId||row.status!=='ready'||row.bytes!==file.bytes||row.sha256!==file.sha256||!row.storage_path.startsWith(`${config.ownerId}/${file.id}/source.`)||!/^source\.[a-z]+$/.test(row.storage_path.split('/')[2])||row.storage_path.split('/').length!==3)throw new Error('Archived attachment ownership mismatch');
+  const bytes=await download(row,env);
+  if(bytes.length!==file.bytes||sha(bytes)!==file.sha256)throw new Error('Archived attachment checksum mismatch');
+  await writeVerified(config.vaultPath,file.path,bytes);
+ }
 }
 export async function writeVerified(vault, path, contents) {
  const root=await realpath(vault); const target=join(root,path); const rel=relative(root,target);
@@ -40,7 +69,7 @@ export async function writeVerified(vault, path, contents) {
 }
 async function summarize(archive, env, api) {
  const anthropic=new Anthropic({apiKey:env.ANTHROPIC_API_KEY,timeout:120000,maxRetries:1});
- const input=archive.snapshot.map(m=>`[${m.created_at}] ${m.title} / ${m.role}\n${m.content}`).join('\n\n');
+ const input=archive.snapshot.map(m=>`[${m.created_at}] ${m.title} / ${m.role}\n${m.content}${m.metadata?.attachments?.length?'\n첨부 원본(별도 보관): '+m.metadata.attachments.map(f=>f.filename).join(', '):''}`).join('\n\n');
  if(input.length>2000000) throw new Error('Weekly archive is too large for automatic summary');
  const chunks=[];for(let start=0;start<input.length;start+=20000) chunks.push(input.slice(start,start+20000));
  const parts=[];
@@ -55,7 +84,7 @@ async function summarize(archive, env, api) {
  while(parts.length>1) { const next=[];let batch='';for(const part of parts){if(batch.length+part.length>24000&&batch){next.push(await ask(batch,true));batch='';}batch+='\n\n'+part;}if(batch)next.push(await ask(batch,true));parts.splice(0,parts.length,...next); }
  return parts[0];
 }
-export async function archiveAssistant({api,config,env,now=new Date()}) {
+export async function archiveAssistant({api,config,env,now=new Date(),download=downloadOriginal}) {
  await api('rpc/tidy_archived_assistant_conversations','POST',{p_owner:config.ownerId});
  const query=new URLSearchParams({select:'created_at,assistant_conversations!inner(user_id)','assistant_conversations.user_id':'eq.'+config.ownerId,archive_id:'is.null',created_at:'lt.'+eligibleCutoff(now),order:'created_at.asc',limit:'1'});
  const oldest=await api('assistant_messages?'+query,'GET');if(!oldest.length)return;
@@ -73,6 +102,8 @@ export async function archiveAssistant({api,config,env,now=new Date()}) {
   } else if(sha(raw)!==archive.transcript_hash||sha(summary)!==archive.summary_hash) throw new Error('Archive contents do not match prepared hashes');
   const transcriptHash=await writeVerified(config.vaultPath,transcriptPath,raw);
   const summaryHash=await writeVerified(config.vaultPath,summaryPath,summary);
+  // Never hide a conversation before every attachment original is verified in the vault.
+  await archiveOriginals(archive,config,api,env,download);
   const count=await api('rpc/acknowledge_assistant_archive','POST',{p_archive:id,p_transcript_hash:transcriptHash,p_summary_hash:summaryHash,p_lease:archive.lease_token});
   console.log(`${new Date().toISOString()} 주간 대화 보관 완료: ${archive.week_start}, 정리 ${count}개`);
  } catch(error) {

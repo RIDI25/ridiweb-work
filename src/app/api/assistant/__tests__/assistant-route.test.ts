@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-const f = vi.hoisted(() => ({ access: vi.fn(), model: vi.fn(), read: vi.fn(), prepare: vi.fn(), insert: vi.fn(), save: vi.fn(), usage: vi.fn(), begin: vi.fn(), finish: vi.fn(), history: vi.fn(), specialist: vi.fn() }));
+const f = vi.hoisted(() => ({ attachment: vi.fn(), access: vi.fn(), model: vi.fn(), read: vi.fn(), prepare: vi.fn(), insert: vi.fn(), save: vi.fn(), usage: vi.fn(), begin: vi.fn(), finish: vi.fn(), history: vi.fn(), specialist: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     auth: { getUser: async () => ({ data: { user: { id: "me" } } }) }, rpc: f.begin,
@@ -13,6 +13,7 @@ vi.mock("@/lib/workspace-access", () => ({ workspaceAccess: f.access }));
 vi.mock("@/lib/assistant/tools", () => ({ ASSISTANT_TOOLS: ["create_task","list_tasks","create_lecture_project","update_lecture_project","save_lecture_document","search_lectures","read_lecture","create_moai_gathering","upsert_moai_sessions","search_moai","read_moai","list_schedule"].map(name => ({name})), executeAssistantTool: f.read }));
 vi.mock("@/lib/assistant/prepare-action", () => ({ prepareAction: f.prepare }));
 vi.mock("@/lib/assistant/specialist", async (original) => ({ ...await original<typeof import("@/lib/assistant/specialist")>(), runSpecialist: f.specialist }));
+vi.mock("@/lib/assistant/attachment-tools", async (original) => ({ ...await original<typeof import("@/lib/assistant/attachment-tools")>(), attachmentTool: f.attachment }));
 vi.mock("@/lib/usage", () => ({ logApiUsage: f.usage }));
 import { POST } from "../route";
 const request = (messages = [{ role: "user", content: "업무를 등록해줘" }]) => {
@@ -177,4 +178,31 @@ describe("lecture writes stay behind confirmation and personal workspace access"
 it("never saves a partially generated document tool call",async()=>{
   f.model.mockResolvedValue({usage:{input_tokens:1,output_tokens:8192},stop_reason:"max_tokens",content:[{type:"tool_use",id:"cut",name:"save_lecture_document",input:{body:"partial"}}]});
   const data=await (await POST(request())).json();expect(data.ok).toBe(false);expect(f.prepare).not.toHaveBeenCalled();expect(f.insert).not.toHaveBeenCalled();
+});
+
+
+describe("attachment message flow", () => {
+  const id = "10000000-0000-4000-8000-000000000003";
+  const fileRequest = (ids = [id]) => new NextRequest("http://localhost/api/assistant", { method: "POST", body: JSON.stringify({ conversationId: "10000000-0000-4000-8000-000000000001", requestId: "10000000-0000-4000-8000-000000000002", message: "", attachmentIds: ids }) });
+  it("saves file-only messages atomically and gives Fable actual multimodal tool results", async () => {
+    f.access.mockResolvedValue({ restricted: true, moaiRole: "operator" });
+    f.history.mockResolvedValue({ data: [{ role: "user", content: "첨부파일 내용을 확인해 줘.", context: "전체 업무", metadata: { attachments: [{ id, filename: "기획.pdf" }] } }] });
+    const media = [{ type: "document", source: { type: "base64", media_type: "application/pdf", data: "synthetic" } }];
+    f.attachment.mockResolvedValue({ ok: true, content: media, summary: "기획.pdf 내용을 참고했어요." });
+    f.model.mockResolvedValueOnce({ usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: "tool_use", id: "file1", name: "read_attachment", input: { id } }] }).mockResolvedValueOnce({ usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: "text", text: "기획서 요약" }] });
+    const result = await (await POST(fileRequest())).json();
+    expect(result.ok).toBe(true);
+    expect(f.begin).toHaveBeenCalledWith("begin_assistant_turn_with_files", expect.objectContaining({ p_files: [id], p_content: "첨부파일 내용을 확인해 줘." }));
+    expect(f.model.mock.calls[1][0].messages).toContainEqual({ role: "user", content: [{ type: "tool_result", tool_use_id: "file1", content: media, is_error: false }] });
+    expect(f.model.mock.calls[0][0].tools.some((t: { name: string }) => t.name === "read_attachment")).toBe(true);
+    expect(JSON.stringify(result)).not.toContain("synthetic"); expect(f.prepare).not.toHaveBeenCalled();
+  });
+  it("rejects invalid and repeated attachment identifiers before saving or reading", async () => {
+    for (const ids of [[id, id], ["https://example.com/file"], Array(6).fill(id)]) expect((await POST(fileRequest(ids))).status).toBe(400);
+    expect(f.begin).not.toHaveBeenCalled(); expect(f.model).not.toHaveBeenCalled();
+  });
+  it("never answers about a file whose atomic association failed", async () => {
+    f.begin.mockResolvedValue({ error: { message: "foreign attachment" } });
+    expect((await POST(fileRequest())).status).toBe(409); expect(f.attachment).not.toHaveBeenCalled(); expect(f.model).not.toHaveBeenCalled();
+  });
 });
